@@ -85,6 +85,11 @@ export default function Home() {
     loadMySupports();
   }
 
+  async function handleDelete(id) {
+    await supabase.from("stands").delete().eq("id", id);
+    loadStands();
+  }
+
   if (!session) {
     return (
       <div className="max-w-sm mx-auto py-16 px-4">
@@ -145,22 +150,34 @@ export default function Home() {
 
       {stands.map((s) => {
         const alreadySupported = mySupports.includes(s.id);
+        const isMine = s.user_id === session.user.id;
         return (
           <div
             key={s.id}
             className="flex justify-between items-center border rounded p-3 mb-2"
           >
             <span>{s.text}</span>
-            <button
-              disabled={alreadySupported}
-              onClick={() => handleSupport(s.id, s.support_count)}
-              className={alreadySupported ? "opacity-40" : ""}
-            >
-              ❤️ {s.support_count}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                disabled={alreadySupported}
+                onClick={() => handleSupport(s.id, s.support_count)}
+                className={alreadySupported ? "opacity-40" : ""}
+              >
+                ❤️ {s.support_count}
+              </button>
+              {isMine && (
+                <button
+                  onClick={() => handleDelete(s.id)}
+                  className="text-red-600 text-sm"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
           </div>
         );
       })}
     </div>
   );
 }
+
