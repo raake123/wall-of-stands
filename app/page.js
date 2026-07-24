@@ -1,4 +1,3 @@
-cat > app/page.js << 'PAGEEOF'
 "use client";
 
 import { useEffect, useState } from "react";
