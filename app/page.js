@@ -377,10 +377,11 @@ export default function Home() {
   const initial = profile ? profile.name.charAt(0).toUpperCase() : "";
   const totalSupporters = stands.reduce((sum, s) => sum + (s.support_count || 0), 0);
   const visibleStands = filter === "All" ? stands : stands.filter((s) => s.category === filter);
-  const composerSize = text ? "w-64 h-64" : "w-28 h-28";
+  const composerPx = text ? 220 : 110;
+  const ringGap = text ? 6 : 0;
 
   return (
-    <div className="min-h-screen pb-24" style={{ backgroundColor: BG }}>
+    <div className="min-h-screen pb-32" style={{ backgroundColor: BG }}>
       <div
         className={
           "max-w-md mx-auto px-4 py-6 transition-all duration-500 " +
@@ -414,22 +415,43 @@ export default function Home() {
           Tap the circle, declare your stand
         </p>
         <div className="flex justify-center mb-3">
-          <div className={dropping ? "relative animate-drop" : "relative"}>
+          <div
+            className={dropping ? "animate-drop" : ""}
+            style={{
+              position: "relative",
+              width: composerPx,
+              height: composerPx,
+              transition: "width 400ms ease, height 400ms ease",
+            }}
+          >
             {text && (
               <div
-                className="absolute inset-0 rounded-full animate-spin"
-                style={{ background: "conic-gradient(from 0deg, " + RED + ", " + GOLD + ", " + RED + ")" }}
+                className="animate-spin"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: composerPx,
+                  height: composerPx,
+                  borderRadius: "9999px",
+                  background: "conic-gradient(from 0deg, " + RED + ", " + GOLD + ", " + RED + ")",
+                }}
               />
             )}
             <div
-              className={
-                "relative flex items-center justify-center transition-all duration-500 ease-out rounded-full " +
-                composerSize
-              }
               style={{
+                position: "absolute",
+                top: ringGap,
+                left: ringGap,
+                width: composerPx - ringGap * 2,
+                height: composerPx - ringGap * 2,
+                borderRadius: "9999px",
                 backgroundColor: text ? "#1a1400" : CARD,
                 border: text ? "none" : "2px solid " + BORDER,
-                margin: text ? "5px" : "0px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "width 400ms ease, height 400ms ease, background-color 300ms",
               }}
             >
               <textarea
