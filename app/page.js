@@ -69,14 +69,36 @@ export default function Home() {
 
   async function handleSignUp() {
     setAuthError("");
-    const { error } = await supabase.auth.signUp({ email, password });
+    if (!email.trim() || !password.trim()) {
+      setAuthError("Enter an email and password first.");
+      return;
+    }
+    const { error } = await supabase.auth.signUp({ email: email.trim(), password });
     if (error) setAuthError(error.message);
   }
 
   async function handleLogIn() {
     setAuthError("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (!email.trim() || !password.trim()) {
+      setAuthError("Enter an email and password first.");
+      return;
+    }
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
     if (error) setAuthError(error.message);
+  }
+
+  async function handleForgotPassword() {
+    setAuthError("");
+    if (!email.trim()) {
+      setAuthError("Type your email above, then tap Forgot password.");
+      return;
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+    if (error) setAuthError(error.message);
+    else setAuthError("Check your email for a reset link.");
   }
 
   async function handleLogOut() {
@@ -171,6 +193,12 @@ export default function Home() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+          <button
+            onClick={handleForgotPassword}
+            className="text-[#9b7fa3] text-xs underline mb-3 block"
+          >
+            Forgot password?
+          </button>
           {authError && <p className="text-red-400 text-sm mb-2">{authError}</p>}
           <button
             onClick={handleLogIn}
