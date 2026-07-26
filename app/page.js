@@ -13,6 +13,10 @@ export default function Home() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
+  const [authMode, setAuthMode] = useState("login");
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [resetMsg, setResetMsg] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [stands, setStands] = useState([]);
@@ -27,8 +31,14 @@ export default function Home() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s);
+      if (event === "PASSWORD_RECOVERY") {
+        setRecoveryMode(true);
+      }
+    });
     loadStands();
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -101,6 +111,21 @@ export default function Home() {
     else setAuthError("Check your email for a reset link.");
   }
 
+  async function handleSetNewPassword() {
+    setResetMsg("");
+    if (!newPassword.trim() || newPassword.length < 6) {
+      setResetMsg("Password must be at least 6 characters.");
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      setResetMsg(error.message);
+      return;
+    }
+    setRecoveryMode(false);
+    setNewPassword("");
+  }
+
   async function handleLogOut() {
     await supabase.auth.signOut();
     setProfile(null);
@@ -167,6 +192,35 @@ export default function Home() {
     setComments({ ...comments, [standId]: data || [] });
   }
 
+  if (recoveryMode) {
+    return (
+      <div className="min-h-screen bg-[#150f18] flex items-center justify-center px-4">
+        <div className="max-w-sm w-full">
+          <h1
+            className="text-2xl italic font-bold text-[#f0e8d8] mb-4"
+            style={{ fontFamily: "Georgia, serif" }}
+          >
+            Set a new password
+          </h1>
+          <input
+            className="w-full bg-[#241b28] border border-[#3a2c40] text-[#f0e8d8] p-3 rounded mb-2"
+            placeholder="New password"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+          {resetMsg && <p className="text-red-400 text-sm mb-2">{resetMsg}</p>}
+          <button
+            onClick={handleSetNewPassword}
+            className="w-full bg-[#d9a668] text-[#2b1f0f] p-3 rounded-full font-medium"
+          >
+            Update password
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!session) {
     return (
       <div className="min-h-screen bg-[#150f18] flex items-center justify-center px-4">
@@ -180,6 +234,30 @@ export default function Home() {
           <p className="text-[#9b7fa3] text-sm mb-6">
             Where a stand is filed, not just posted.
           </p>
+
+          <div className="flex mb-4 border-b border-[#3a2c40]">
+            <button
+              onClick={() => setAuthMode("login")}
+              className={
+                authMode === "login"
+                  ? "flex-1 pb-2 text-sm font-medium text-[#d9a668] border-b-2 border-[#d9a668]"
+                  : "flex-1 pb-2 text-sm text-[#9b7fa3]"
+              }
+            >
+              Log In
+            </button>
+            <button
+              onClick={() => setAuthMode("signup")}
+              className={
+                authMode === "signup"
+                  ? "flex-1 pb-2 text-sm font-medium text-[#d9a668] border-b-2 border-[#d9a668]"
+                  : "flex-1 pb-2 text-sm text-[#9b7fa3]"
+              }
+            >
+              Sign Up
+            </button>
+          </div>
+
           <input
             className="w-full bg-[#241b28] border border-[#3a2c40] text-[#f0e8d8] p-3 rounded mb-2"
             placeholder="Email"
@@ -193,25 +271,33 @@ export default function Home() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <button
-            onClick={handleForgotPassword}
-            className="text-[#9b7fa3] text-xs underline mb-3 block"
-          >
-            Forgot password?
-          </button>
+
+          {authMode === "login" && (
+            <button
+              onClick={handleForgotPassword}
+              className="text-[#9b7fa3] text-xs underline mb-3 block"
+            >
+              Forgot password?
+            </button>
+          )}
+
           {authError && <p className="text-red-400 text-sm mb-2">{authError}</p>}
-          <button
-            onClick={handleLogIn}
-            className="w-full bg-[#d9a668] text-[#2b1f0f] p-3 rounded-full font-medium mb-2"
-          >
-            Log In
-          </button>
-          <button
-            onClick={handleSignUp}
-            className="w-full border border-[#3a2c40] text-[#f0e8d8] p-3 rounded-full font-medium"
-          >
-            Sign Up
-          </button>
+
+          {authMode === "login" ? (
+            <button
+              onClick={handleLogIn}
+              className="w-full bg-[#d9a668] text-[#2b1f0f] p-3 rounded-full font-medium"
+            >
+              Log In
+            </button>
+          ) : (
+            <button
+              onClick={handleSignUp}
+              className="w-full bg-[#d9a668] text-[#2b1f0f] p-3 rounded-full font-medium"
+            >
+              Sign Up
+            </button>
+          )}
         </div>
       </div>
     );
