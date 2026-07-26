@@ -2,9 +2,37 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  LogOut,
+  User,
+  Send,
+  MessageCircle,
+  CheckCircle2,
+  Leaf,
+  GraduationCap,
+  Heart,
+  Scale,
+  Home as HomeIcon,
+  Hammer,
+  Landmark,
+  Cloud,
+} from "lucide-react";
 import { supabase } from "./lib/supabase";
 
-const CAUSES = ["Environment", "Education", "Health", "Justice", "Housing", "Labor", "Democracy", "Climate"];
+const CAUSES = [
+  { name: "Environment", color: "#5a8a6b", Icon: Leaf },
+  { name: "Education", color: "#4a6fa5", Icon: GraduationCap },
+  { name: "Health", color: "#c2645a", Icon: Heart },
+  { name: "Justice", color: "#d9a668", Icon: Scale },
+  { name: "Housing", color: "#b56b45", Icon: HomeIcon },
+  { name: "Labor", color: "#6b7a8f", Icon: Hammer },
+  { name: "Democracy", color: "#7a5a94", Icon: Landmark },
+  { name: "Climate", color: "#4a9187", Icon: Cloud },
+];
+
+function causeFor(name) {
+  return CAUSES.find((c) => c.name === name) || CAUSES[0];
+}
 
 export default function Home() {
   const router = useRouter();
@@ -17,12 +45,12 @@ export default function Home() {
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [resetMsg, setResetMsg] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [stands, setStands] = useState([]);
+  const [loadingStands, setLoadingStands] = useState(true);
   const [mySupports, setMySupports] = useState([]);
   const [text, setText] = useState("");
-  const [category, setCategory] = useState(CAUSES[0]);
+  const [category, setCategory] = useState(CAUSES[0].name);
 
   const [openComments, setOpenComments] = useState({});
   const [comments, setComments] = useState({});
@@ -62,11 +90,13 @@ export default function Home() {
   }
 
   async function loadStands() {
+    setLoadingStands(true);
     const { data } = await supabase
       .from("stands")
       .select("*")
       .order("created_at", { ascending: false });
     setStands(data || []);
+    setLoadingStands(false);
   }
 
   async function loadMySupports() {
@@ -222,6 +252,8 @@ export default function Home() {
   }
 
   if (!session) {
+    const showSignupHint =
+      authMode === "login" && authError.includes("Invalid login credentials");
     return (
       <div className="min-h-screen bg-[#150f18] flex items-center justify-center px-4">
         <div className="max-w-sm w-full">
@@ -237,7 +269,10 @@ export default function Home() {
 
           <div className="flex mb-4 border-b border-[#3a2c40]">
             <button
-              onClick={() => setAuthMode("login")}
+              onClick={() => {
+                setAuthMode("login");
+                setAuthError("");
+              }}
               className={
                 authMode === "login"
                   ? "flex-1 pb-2 text-sm font-medium text-[#d9a668] border-b-2 border-[#d9a668]"
@@ -247,7 +282,10 @@ export default function Home() {
               Log In
             </button>
             <button
-              onClick={() => setAuthMode("signup")}
+              onClick={() => {
+                setAuthMode("signup");
+                setAuthError("");
+              }}
               className={
                 authMode === "signup"
                   ? "flex-1 pb-2 text-sm font-medium text-[#d9a668] border-b-2 border-[#d9a668]"
@@ -281,19 +319,30 @@ export default function Home() {
             </button>
           )}
 
-          {authError && <p className="text-red-400 text-sm mb-2">{authError}</p>}
+          {authError && <p className="text-red-400 text-sm mb-1">{authError}</p>}
+          {showSignupHint && (
+            <button
+              onClick={() => {
+                setAuthMode("signup");
+                setAuthError("");
+              }}
+              className="text-[#d9a668] text-xs underline mb-2 block"
+            >
+              No account with this email yet — tap to sign up instead
+            </button>
+          )}
 
           {authMode === "login" ? (
             <button
               onClick={handleLogIn}
-              className="w-full bg-[#d9a668] text-[#2b1f0f] p-3 rounded-full font-medium"
+              className="w-full bg-[#d9a668] text-[#2b1f0f] p-3 rounded-full font-medium mt-2"
             >
               Log In
             </button>
           ) : (
             <button
               onClick={handleSignUp}
-              className="w-full bg-[#d9a668] text-[#2b1f0f] p-3 rounded-full font-medium"
+              className="w-full bg-[#d9a668] text-[#2b1f0f] p-3 rounded-full font-medium mt-2"
             >
               Sign Up
             </button>
@@ -303,37 +352,21 @@ export default function Home() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-[#150f18]">
-      {sidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setSidebarOpen(false)}>
-          <div className="bg-[#1c1521] w-64 h-full p-6" onClick={(e) => e.stopPropagation()}>
-            <p className="text-[#f0e8d8] font-medium mb-1">{profile ? profile.name : ""}</p>
-            <p className="text-[#9b7fa3] text-sm mb-6">@{profile ? profile.username : ""}</p>
-            {profile && (
-              <a href={"/profile/" + profile.username} className="block text-[#c9a5d1] mb-3">
-                My profile
-              </a>
-            )}
-            <button onClick={handleLogOut} className="text-[#c23b32] text-sm">
-              Log out
-            </button>
-          </div>
-        </div>
-      )}
+  const initial = profile ? profile.name.charAt(0).toUpperCase() : "";
 
+  return (
+    <div className="min-h-screen bg-[#150f18] pb-20">
       <div className="max-w-md mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-6">
-          <button onClick={() => setSidebarOpen(true)} className="text-[#f0e8d8]" aria-label="Menu">
-            ☰
-          </button>
           <h1
             className="text-xl italic font-bold text-[#f0e8d8]"
             style={{ fontFamily: "Georgia, serif" }}
           >
             Wall of Stands
           </h1>
-          <div className="w-6" />
+          {profile && (
+            <a href={"/profile/" + profile.username} className="w-9 h-9 rounded-full bg-[#4a3620] text-[#d9a668] flex items-center justify-center text-sm font-medium">{initial}</a>
+          )}
         </div>
 
         <p className="text-[#9b7fa3] text-xs text-center mb-2">
@@ -357,34 +390,68 @@ export default function Home() {
           </div>
         </div>
 
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className="w-full bg-[#241b28] border border-[#3a2c40] text-[#c9a5d1] p-2 rounded mb-3 text-sm"
-        >
-          {CAUSES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap gap-2 justify-center mb-4">
+          {CAUSES.map((c) => {
+            const CIcon = c.Icon;
+            const active = category === c.name;
+            return (
+              <button
+                key={c.name}
+                onClick={() => setCategory(c.name)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs border transition-colors"
+                style={
+                  active
+                    ? { borderColor: c.color, color: c.color, backgroundColor: "#20232e" }
+                    : { borderColor: "#3a2c40", color: "#9b7fa3", backgroundColor: "transparent" }
+                }
+              >
+                <CIcon size={13} />
+                {c.name}
+              </button>
+            );
+          })}
+        </div>
 
         <button
           onClick={handlePost}
-          className="w-full bg-[#d9a668] text-[#2b1f0f] p-3 rounded-full font-medium mb-8"
+          className="w-full bg-[#d9a668] text-[#2b1f0f] p-3 rounded-full font-medium mb-8 flex items-center justify-center gap-2"
         >
+          <Send size={15} />
           File this stand
         </button>
+
+        {loadingStands && (
+          <p className="text-[#6b6f80] text-sm text-center py-10">
+            Loading the wall...
+          </p>
+        )}
+
+        {!loadingStands && stands.length === 0 && (
+          <div className="text-center py-14">
+            <Landmark size={32} color="#4a3650" className="mx-auto mb-3" />
+            <p className="text-[#9b7fa3] text-sm">
+              No one has filed a stand yet.
+            </p>
+            <p className="text-[#6b6f80] text-xs mt-1">Be the first.</p>
+          </div>
+        )}
 
         {stands.map((s) => {
           const supported = mySupports.includes(s.id);
           const isMine = s.user_id === session.user.id;
+          const cause = causeFor(s.category);
+          const CIcon = cause.Icon;
           return (
             <div
               key={s.id}
-              className="bg-[#241b28] border border-[#3a2c40] border-l-4 border-l-[#d9a668] p-4 mb-4"
+              className="bg-[#241b28] border border-[#3a2c40] p-4 mb-4"
+              style={{ borderLeft: "4px solid " + cause.color }}
             >
-              <span className="inline-flex items-center gap-1 bg-[#4a3620] text-[#d9a668] text-xs px-3 py-1 rounded-full mb-2">
+              <span
+                className="inline-flex items-center gap-1 text-xs px-3 py-1 rounded-full mb-2 border"
+                style={{ borderColor: cause.color, color: cause.color }}
+              >
+                <CIcon size={12} />
                 {s.category || "General"}
               </span>
               <p className="text-[#f0e8d8] mb-3" style={{ fontFamily: "Georgia, serif" }}>
@@ -411,13 +478,18 @@ export default function Home() {
                 {isMine && (
                   <button
                     onClick={() => handleResolve(s.id)}
-                    className="bg-[#2e4535] text-[#a8d9bf] text-xs px-3 py-2 rounded"
+                    className="bg-[#2e4535] text-[#a8d9bf] text-xs px-3 py-2 rounded flex items-center gap-1"
                   >
+                    <CheckCircle2 size={13} />
                     Resolved
                   </button>
                 )}
               </div>
-              <button onClick={() => toggleComments(s.id)} className="text-[#9b7fa3] text-xs">
+              <button
+                onClick={() => toggleComments(s.id)}
+                className="text-[#9b7fa3] text-xs flex items-center gap-1"
+              >
+                <MessageCircle size={13} />
                 {openComments[s.id] ? "Hide responses" : "View responses"}
               </button>
               {openComments[s.id] && (
@@ -451,6 +523,23 @@ export default function Home() {
             </div>
           );
         })}
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 bg-[#1c1521] border-t border-[#3a2c40] flex justify-around py-3">
+        <div className="flex flex-col items-center text-[#d9a668]">
+          <HomeIcon size={20} />
+          <span className="text-[10px] mt-1">Wall</span>
+        </div>
+        {profile && (
+          <a href={"/profile/" + profile.username} className="flex flex-col items-center text-[#9b7fa3]">
+            <User size={20} />
+            <span className="text-[10px] mt-1">Profile</span>
+          </a>
+        )}
+        <button onClick={handleLogOut} className="flex flex-col items-center text-[#9b7fa3]">
+          <LogOut size={20} />
+          <span className="text-[10px] mt-1">Log out</span>
+        </button>
       </div>
     </div>
   );
