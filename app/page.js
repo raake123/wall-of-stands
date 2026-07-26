@@ -18,22 +18,19 @@ import {
   Cloud,
   Trophy,
   Flame,
+  Sun,
+  Moon,
+  TrendingUp,
+  Sparkles,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
-
-const RED = "#e63946";
-const GOLD = "#ffd60a";
-const WHITE = "#f5f0e6";
-const BG = "#0a0a0a";
-const CARD = "#161616";
-const BORDER = "#2a2a2a";
-const MUTED = "#8a8a8a";
+import { useTheme } from "./lib/theme-context";
 
 const CAUSES = [
   { name: "Environment", color: "#2ecc71", Icon: Leaf },
   { name: "Education", color: "#4cc9f0", Icon: GraduationCap },
   { name: "Health", color: "#ff4d6d", Icon: Heart },
-  { name: "Justice", color: GOLD, Icon: Scale },
+  { name: "Justice", color: "#ffd60a", Icon: Scale },
   { name: "Housing", color: "#f77f00", Icon: HomeIcon },
   { name: "Labor", color: "#adb5bd", Icon: Hammer },
   { name: "Democracy", color: "#9d4edd", Icon: Landmark },
@@ -44,8 +41,18 @@ function causeFor(name) {
   return CAUSES.find((c) => c.name === name) || CAUSES[0];
 }
 
+function tierFor(count) {
+  if (count >= 50) return "movement";
+  if (count >= 25) return "surging";
+  if (count >= 10) return "milestone";
+  return null;
+}
+
 export default function Home() {
   const router = useRouter();
+  const { colors, theme, toggleTheme } = useTheme();
+  const { RED, GOLD, WHITE, BG, CARD, BORDER, MUTED } = colors;
+
   const [mounted, setMounted] = useState(false);
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -64,6 +71,9 @@ export default function Home() {
   const [category, setCategory] = useState(CAUSES[0].name);
   const [dropping, setDropping] = useState(false);
   const [filter, setFilter] = useState("All");
+  const [sortMode, setSortMode] = useState("new");
+  const [justLandedId, setJustLandedId] = useState(null);
+  const [burstId, setBurstId] = useState(null);
 
   const [openComments, setOpenComments] = useState({});
   const [comments, setComments] = useState({});
@@ -179,15 +189,25 @@ export default function Home() {
     if (!text.trim() || dropping) return;
     setDropping(true);
     setTimeout(async () => {
-      await supabase.from("stands").insert({ text, user_id: session.user.id, category });
+      const { data } = await supabase
+        .from("stands")
+        .insert({ text, user_id: session.user.id, category })
+        .select()
+        .maybeSingle();
       setText("");
       setDropping(false);
-      loadStands();
-    }, 450);
+      await loadStands();
+      if (data) {
+        setJustLandedId(data.id);
+        setTimeout(() => setJustLandedId(null), 600);
+      }
+    }, 550);
   }
 
   async function handleSupport(id, currentCount) {
     if (mySupports.includes(id)) return;
+    setBurstId(id);
+    setTimeout(() => setBurstId(null), 600);
     const { error } = await supabase
       .from("supports")
       .insert({ stand_id: id, user_id: session.user.id });
@@ -240,6 +260,17 @@ export default function Home() {
     setComments({ ...comments, [standId]: data || [] });
   }
 
+  const ThemeToggle = (
+    <button
+      onClick={toggleTheme}
+      aria-label="Toggle theme"
+      className="w-9 h-9 rounded-full flex items-center justify-center"
+      style={{ border: "1.5px solid " + BORDER, color: GOLD, backgroundColor: CARD }}
+    >
+      {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+    </button>
+  );
+
   if (recoveryMode) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: BG }}>
@@ -274,9 +305,12 @@ export default function Home() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: BG }}>
         <div className="max-w-sm w-full">
-          <h1 className="text-4xl font-black uppercase tracking-tight mb-1" style={{ color: WHITE }}>
-            Wall of <span style={{ color: RED }}>Stands</span>
-          </h1>
+          <div className="flex items-center justify-between mb-1">
+            <h1 className="text-4xl font-black uppercase tracking-tight" style={{ color: WHITE }}>
+              Wall of <span style={{ color: RED }}>Stands</span>
+            </h1>
+            {ThemeToggle}
+          </div>
           <p className="text-sm mb-6" style={{ color: MUTED }}>
             Where a stand is filed, not just posted.
           </p>
@@ -356,7 +390,7 @@ export default function Home() {
             <button
               onClick={handleLogIn}
               className="w-full p-3 rounded-full font-bold uppercase tracking-wide mt-2"
-              style={{ backgroundColor: RED, color: WHITE }}
+              style={{ backgroundColor: RED, color: "#fff" }}
             >
               Log In
             </button>
@@ -364,7 +398,7 @@ export default function Home() {
             <button
               onClick={handleSignUp}
               className="w-full p-3 rounded-full font-bold uppercase tracking-wide mt-2"
-              style={{ backgroundColor: RED, color: WHITE }}
+              style={{ backgroundColor: RED, color: "#fff" }}
             >
               Sign Up
             </button>
@@ -376,9 +410,13 @@ export default function Home() {
 
   const initial = profile ? profile.name.charAt(0).toUpperCase() : "";
   const totalSupporters = stands.reduce((sum, s) => sum + (s.support_count || 0), 0);
-  const visibleStands = filter === "All" ? stands : stands.filter((s) => s.category === filter);
-  const composerPx = text ? 220 : 110;
-  const ringGap = text ? 6 : 0;
+  const filteredStands = filter === "All" ? stands : stands.filter((s) => s.category === filter);
+  const visibleStands =
+    sortMode === "rising"
+      ? [...filteredStands].sort((a, b) => (b.support_count || 0) - (a.support_count || 0))
+      : filteredStands;
+  const composerPx = text ? 260 : 104;
+  const ringGap = text ? 9 : 0;
 
   return (
     <div className="min-h-screen pb-32" style={{ backgroundColor: BG }}>
@@ -392,9 +430,18 @@ export default function Home() {
           <h1 className="text-2xl font-black uppercase tracking-tight" style={{ color: WHITE }}>
             Wall of <span style={{ color: RED }}>Stands</span>
           </h1>
-          {profile && (
-            <a href={"/profile/" + profile.username} className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold" style={{ backgroundColor: GOLD, color: "#1a1400" }}>{initial}</a>
-          )}
+          <div className="flex items-center gap-2">
+            {ThemeToggle}
+            {profile && (
+              <a
+                href={"/profile/" + profile.username}
+                className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold"
+                style={{ backgroundColor: GOLD, color: "#1a1400" }}
+              >
+                {initial}
+              </a>
+            )}
+          </div>
         </div>
 
         <div
@@ -421,20 +468,18 @@ export default function Home() {
               position: "relative",
               width: composerPx,
               height: composerPx,
-              transition: "width 400ms ease, height 400ms ease",
+              transition: "width 420ms cubic-bezier(.34,1.2,.4,1), height 420ms cubic-bezier(.34,1.2,.4,1)",
             }}
           >
             {text && (
               <div
-                className="animate-spin"
+                className="animate-ring-spin"
                 style={{
                   position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: composerPx,
-                  height: composerPx,
+                  inset: 0,
                   borderRadius: "9999px",
-                  background: "conic-gradient(from 0deg, " + RED + ", " + GOLD + ", " + RED + ")",
+                  background:
+                    "conic-gradient(from 0deg, " + RED + ", " + GOLD + ", " + RED + ", " + GOLD + ", " + RED + ")",
                 }}
               />
             )}
@@ -451,11 +496,11 @@ export default function Home() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                transition: "width 400ms ease, height 400ms ease, background-color 300ms",
+                transition: "width 420ms cubic-bezier(.34,1.2,.4,1), height 420ms cubic-bezier(.34,1.2,.4,1), background-color 300ms",
               }}
             >
               <textarea
-                className="bg-transparent text-center w-full h-full outline-none resize-none text-sm font-bold p-4"
+                className="bg-transparent text-center w-full h-full outline-none resize-none text-sm font-bold p-5"
                 style={{ color: text ? GOLD : WHITE }}
                 placeholder="I stand for..."
                 value={text}
@@ -490,11 +535,38 @@ export default function Home() {
         <button
           onClick={handlePost}
           className="w-full p-3 rounded-full font-bold uppercase tracking-wide mb-6 flex items-center justify-center gap-2"
-          style={{ backgroundColor: RED, color: WHITE }}
+          style={{ backgroundColor: RED, color: "#fff" }}
         >
           <Send size={15} />
           File this stand
         </button>
+
+        <div className="flex gap-2 mb-3">
+          <button
+            onClick={() => setSortMode("new")}
+            className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wide flex items-center justify-center gap-1"
+            style={
+              sortMode === "new"
+                ? { backgroundColor: GOLD, color: "#1a1400" }
+                : { border: "1px solid " + BORDER, color: MUTED }
+            }
+          >
+            <Sparkles size={12} />
+            New
+          </button>
+          <button
+            onClick={() => setSortMode("rising")}
+            className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wide flex items-center justify-center gap-1"
+            style={
+              sortMode === "rising"
+                ? { backgroundColor: RED, color: "#fff" }
+                : { border: "1px solid " + BORDER, color: MUTED }
+            }
+          >
+            <TrendingUp size={12} />
+            Rising
+          </button>
+        </div>
 
         <div className="flex gap-2 overflow-x-auto mb-4 pb-1">
           <button
@@ -502,7 +574,7 @@ export default function Home() {
             className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-bold"
             style={
               filter === "All"
-                ? { backgroundColor: WHITE, color: "#0a0a0a" }
+                ? { backgroundColor: WHITE, color: BG }
                 : { border: "1px solid " + BORDER, color: MUTED }
             }
           >
@@ -543,12 +615,22 @@ export default function Home() {
           const isMine = s.user_id === session.user.id;
           const cause = causeFor(s.category);
           const CIcon = cause.Icon;
-          const isMilestone = s.support_count >= 10;
-          const momentumPct = Math.min(s.support_count * 8, 100);
+          const tier = tierFor(s.support_count);
+          const momentumPct = Math.min(s.support_count * 6, 100);
+          const glowClass =
+            tier === "movement" || tier === "surging"
+              ? "animate-surging"
+              : tier === "milestone"
+              ? "animate-milestone"
+              : "";
           return (
             <div
               key={s.id}
-              className={"rounded-lg p-4 mb-4 " + (isMilestone ? "animate-milestone" : "")}
+              className={
+                "rounded-lg p-4 mb-4 " +
+                glowClass +
+                (justLandedId === s.id ? " animate-landed" : "")
+              }
               style={{ backgroundColor: CARD, borderLeft: "4px solid " + cause.color }}
             >
               <div className="flex items-center justify-between mb-2">
@@ -559,7 +641,23 @@ export default function Home() {
                   <CIcon size={12} />
                   {s.category || "General"}
                 </span>
-                {isMilestone && <Trophy size={16} color={GOLD} />}
+                {tier === "movement" && (
+                  <span
+                    className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-1 rounded-full"
+                    style={{ backgroundColor: RED, color: "#fff" }}
+                  >
+                    <Flame size={11} /> Movement
+                  </span>
+                )}
+                {tier === "surging" && (
+                  <span
+                    className="inline-flex items-center gap-1 text-[10px] font-black uppercase"
+                    style={{ color: RED }}
+                  >
+                    <Flame size={13} /> Surging
+                  </span>
+                )}
+                {tier === "milestone" && <Trophy size={16} color={GOLD} />}
               </div>
               <p className="mb-3 font-medium" style={{ color: WHITE }}>{s.text}</p>
 
@@ -577,7 +675,7 @@ export default function Home() {
                   <button
                     onClick={() => handleSupport(s.id, s.support_count)}
                     disabled={supported}
-                    className="w-10 h-10 rounded-full flex items-center justify-center"
+                    className={"w-10 h-10 rounded-full flex items-center justify-center " + (burstId === s.id ? "animate-rally" : "")}
                     style={
                       supported
                         ? { backgroundColor: RED, border: "2px solid " + RED }
@@ -632,7 +730,7 @@ export default function Home() {
                     <button
                       onClick={() => handleComment(s.id)}
                       className="text-sm px-3 rounded font-bold"
-                      style={{ backgroundColor: RED, color: WHITE }}
+                      style={{ backgroundColor: RED, color: "#fff" }}
                     >
                       Send
                     </button>
