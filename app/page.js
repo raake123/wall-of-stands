@@ -16,18 +16,28 @@ import {
   Hammer,
   Landmark,
   Cloud,
+  Trophy,
+  Flame,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 
+const RED = "#e63946";
+const GOLD = "#ffd60a";
+const WHITE = "#f5f0e6";
+const BG = "#0a0a0a";
+const CARD = "#161616";
+const BORDER = "#2a2a2a";
+const MUTED = "#8a8a8a";
+
 const CAUSES = [
-  { name: "Environment", color: "#5a8a6b", Icon: Leaf },
-  { name: "Education", color: "#4a6fa5", Icon: GraduationCap },
-  { name: "Health", color: "#c2645a", Icon: Heart },
-  { name: "Justice", color: "#d9a668", Icon: Scale },
-  { name: "Housing", color: "#b56b45", Icon: HomeIcon },
-  { name: "Labor", color: "#6b7a8f", Icon: Hammer },
-  { name: "Democracy", color: "#7a5a94", Icon: Landmark },
-  { name: "Climate", color: "#4a9187", Icon: Cloud },
+  { name: "Environment", color: "#2ecc71", Icon: Leaf },
+  { name: "Education", color: "#4cc9f0", Icon: GraduationCap },
+  { name: "Health", color: "#ff4d6d", Icon: Heart },
+  { name: "Justice", color: GOLD, Icon: Scale },
+  { name: "Housing", color: "#f77f00", Icon: HomeIcon },
+  { name: "Labor", color: "#adb5bd", Icon: Hammer },
+  { name: "Democracy", color: "#9d4edd", Icon: Landmark },
+  { name: "Climate", color: "#06d6a0", Icon: Cloud },
 ];
 
 function causeFor(name) {
@@ -36,6 +46,7 @@ function causeFor(name) {
 
 export default function Home() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [email, setEmail] = useState("");
@@ -51,6 +62,8 @@ export default function Home() {
   const [mySupports, setMySupports] = useState([]);
   const [text, setText] = useState("");
   const [category, setCategory] = useState(CAUSES[0].name);
+  const [dropping, setDropping] = useState(false);
+  const [filter, setFilter] = useState("All");
 
   const [openComments, setOpenComments] = useState({});
   const [comments, setComments] = useState({});
@@ -58,6 +71,7 @@ export default function Home() {
   const [commenterNames, setCommenterNames] = useState({});
 
   useEffect(() => {
+    setMounted(true);
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s);
@@ -162,10 +176,14 @@ export default function Home() {
   }
 
   async function handlePost() {
-    if (!text.trim()) return;
-    await supabase.from("stands").insert({ text, user_id: session.user.id, category });
-    setText("");
-    loadStands();
+    if (!text.trim() || dropping) return;
+    setDropping(true);
+    setTimeout(async () => {
+      await supabase.from("stands").insert({ text, user_id: session.user.id, category });
+      setText("");
+      setDropping(false);
+      loadStands();
+    }, 450);
   }
 
   async function handleSupport(id, currentCount) {
@@ -224,25 +242,24 @@ export default function Home() {
 
   if (recoveryMode) {
     return (
-      <div className="min-h-screen bg-[#150f18] flex items-center justify-center px-4">
+      <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: BG }}>
         <div className="max-w-sm w-full">
-          <h1
-            className="text-2xl italic font-bold text-[#f0e8d8] mb-4"
-            style={{ fontFamily: "Georgia, serif" }}
-          >
+          <h1 className="text-2xl font-black uppercase tracking-wide mb-4" style={{ color: WHITE }}>
             Set a new password
           </h1>
           <input
-            className="w-full bg-[#241b28] border border-[#3a2c40] text-[#f0e8d8] p-3 rounded mb-2"
+            className="w-full p-3 rounded mb-2"
+            style={{ backgroundColor: CARD, border: "1px solid " + BORDER, color: WHITE }}
             placeholder="New password"
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
           />
-          {resetMsg && <p className="text-red-400 text-sm mb-2">{resetMsg}</p>}
+          {resetMsg && <p className="text-sm mb-2" style={{ color: RED }}>{resetMsg}</p>}
           <button
             onClick={handleSetNewPassword}
-            className="w-full bg-[#d9a668] text-[#2b1f0f] p-3 rounded-full font-medium"
+            className="w-full p-3 rounded-full font-bold"
+            style={{ backgroundColor: GOLD, color: "#1a1400" }}
           >
             Update password
           </button>
@@ -255,28 +272,26 @@ export default function Home() {
     const showSignupHint =
       authMode === "login" && authError.includes("Invalid login credentials");
     return (
-      <div className="min-h-screen bg-[#150f18] flex items-center justify-center px-4">
+      <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: BG }}>
         <div className="max-w-sm w-full">
-          <h1
-            className="text-3xl italic font-bold text-[#f0e8d8] mb-1"
-            style={{ fontFamily: "Georgia, serif" }}
-          >
-            Wall of Stands
+          <h1 className="text-4xl font-black uppercase tracking-tight mb-1" style={{ color: WHITE }}>
+            Wall of <span style={{ color: RED }}>Stands</span>
           </h1>
-          <p className="text-[#9b7fa3] text-sm mb-6">
+          <p className="text-sm mb-6" style={{ color: MUTED }}>
             Where a stand is filed, not just posted.
           </p>
 
-          <div className="flex mb-4 border-b border-[#3a2c40]">
+          <div className="flex mb-4" style={{ borderBottom: "1px solid " + BORDER }}>
             <button
               onClick={() => {
                 setAuthMode("login");
                 setAuthError("");
               }}
-              className={
+              className="flex-1 pb-2 text-sm font-bold uppercase tracking-wide"
+              style={
                 authMode === "login"
-                  ? "flex-1 pb-2 text-sm font-medium text-[#d9a668] border-b-2 border-[#d9a668]"
-                  : "flex-1 pb-2 text-sm text-[#9b7fa3]"
+                  ? { color: GOLD, borderBottom: "2px solid " + GOLD }
+                  : { color: MUTED }
               }
             >
               Log In
@@ -286,10 +301,11 @@ export default function Home() {
                 setAuthMode("signup");
                 setAuthError("");
               }}
-              className={
+              className="flex-1 pb-2 text-sm font-bold uppercase tracking-wide"
+              style={
                 authMode === "signup"
-                  ? "flex-1 pb-2 text-sm font-medium text-[#d9a668] border-b-2 border-[#d9a668]"
-                  : "flex-1 pb-2 text-sm text-[#9b7fa3]"
+                  ? { color: GOLD, borderBottom: "2px solid " + GOLD }
+                  : { color: MUTED }
               }
             >
               Sign Up
@@ -297,13 +313,15 @@ export default function Home() {
           </div>
 
           <input
-            className="w-full bg-[#241b28] border border-[#3a2c40] text-[#f0e8d8] p-3 rounded mb-2"
+            className="w-full p-3 rounded mb-2"
+            style={{ backgroundColor: CARD, border: "1px solid " + BORDER, color: WHITE }}
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
           <input
-            className="w-full bg-[#241b28] border border-[#3a2c40] text-[#f0e8d8] p-3 rounded mb-2"
+            className="w-full p-3 rounded mb-2"
+            style={{ backgroundColor: CARD, border: "1px solid " + BORDER, color: WHITE }}
             placeholder="Password"
             type="password"
             value={password}
@@ -313,20 +331,22 @@ export default function Home() {
           {authMode === "login" && (
             <button
               onClick={handleForgotPassword}
-              className="text-[#9b7fa3] text-xs underline mb-3 block"
+              className="text-xs underline mb-3 block"
+              style={{ color: MUTED }}
             >
               Forgot password?
             </button>
           )}
 
-          {authError && <p className="text-red-400 text-sm mb-1">{authError}</p>}
+          {authError && <p className="text-sm mb-1" style={{ color: RED }}>{authError}</p>}
           {showSignupHint && (
             <button
               onClick={() => {
                 setAuthMode("signup");
                 setAuthError("");
               }}
-              className="text-[#d9a668] text-xs underline mb-2 block"
+              className="text-xs underline mb-2 block"
+              style={{ color: GOLD }}
             >
               No account with this email yet — tap to sign up instead
             </button>
@@ -335,14 +355,16 @@ export default function Home() {
           {authMode === "login" ? (
             <button
               onClick={handleLogIn}
-              className="w-full bg-[#d9a668] text-[#2b1f0f] p-3 rounded-full font-medium mt-2"
+              className="w-full p-3 rounded-full font-bold uppercase tracking-wide mt-2"
+              style={{ backgroundColor: RED, color: WHITE }}
             >
               Log In
             </button>
           ) : (
             <button
               onClick={handleSignUp}
-              className="w-full bg-[#d9a668] text-[#2b1f0f] p-3 rounded-full font-medium mt-2"
+              className="w-full p-3 rounded-full font-bold uppercase tracking-wide mt-2"
+              style={{ backgroundColor: RED, color: WHITE }}
             >
               Sign Up
             </button>
@@ -353,40 +375,71 @@ export default function Home() {
   }
 
   const initial = profile ? profile.name.charAt(0).toUpperCase() : "";
+  const totalSupporters = stands.reduce((sum, s) => sum + (s.support_count || 0), 0);
+  const visibleStands = filter === "All" ? stands : stands.filter((s) => s.category === filter);
+  const composerSize = text ? "w-64 h-64" : "w-28 h-28";
 
   return (
-    <div className="min-h-screen bg-[#150f18] pb-20">
-      <div className="max-w-md mx-auto px-4 py-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1
-            className="text-xl italic font-bold text-[#f0e8d8]"
-            style={{ fontFamily: "Georgia, serif" }}
-          >
-            Wall of Stands
+    <div className="min-h-screen pb-24" style={{ backgroundColor: BG }}>
+      <div
+        className={
+          "max-w-md mx-auto px-4 py-6 transition-all duration-500 " +
+          (mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4")
+        }
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl font-black uppercase tracking-tight" style={{ color: WHITE }}>
+            Wall of <span style={{ color: RED }}>Stands</span>
           </h1>
           {profile && (
-            <a href={"/profile/" + profile.username} className="w-9 h-9 rounded-full bg-[#4a3620] text-[#d9a668] flex items-center justify-center text-sm font-medium">{initial}</a>
+            <a href={"/profile/" + profile.username} className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold" style={{ backgroundColor: GOLD, color: "#1a1400" }}>{initial}</a>
           )}
         </div>
 
-        <p className="text-[#9b7fa3] text-xs text-center mb-2">
+        <div
+          className="flex justify-between px-4 py-3 rounded-lg mb-6"
+          style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}
+        >
+          <div className="text-center flex-1">
+            <p className="text-lg font-black" style={{ color: GOLD }}>{stands.length}</p>
+            <p className="text-[10px] uppercase tracking-wide" style={{ color: MUTED }}>Stands filed</p>
+          </div>
+          <div className="text-center flex-1" style={{ borderLeft: "1px solid " + BORDER }}>
+            <p className="text-lg font-black" style={{ color: RED }}>{totalSupporters}</p>
+            <p className="text-[10px] uppercase tracking-wide" style={{ color: MUTED }}>Total supporters</p>
+          </div>
+        </div>
+
+        <p className="text-xs text-center mb-2" style={{ color: MUTED }}>
           Tap the circle, declare your stand
         </p>
         <div className="flex justify-center mb-3">
-          <div
-            className={
-              text
-                ? "rounded-full bg-[#332538] border border-[#d9a668] flex items-center justify-center transition-all duration-200 p-4 w-56 h-56"
-                : "rounded-full bg-[#2c2032] border border-[#4a3650] flex items-center justify-center transition-all duration-200 p-4 w-28 h-28"
-            }
-          >
-            <textarea
-              className="bg-transparent text-center text-[#f0e8d8] w-full h-full outline-none resize-none text-sm"
-              style={{ fontFamily: "Georgia, serif" }}
-              placeholder="I stand for..."
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
+          <div className={dropping ? "relative animate-drop" : "relative"}>
+            {text && (
+              <div
+                className="absolute inset-0 rounded-full animate-spin"
+                style={{ background: "conic-gradient(from 0deg, " + RED + ", " + GOLD + ", " + RED + ")" }}
+              />
+            )}
+            <div
+              className={
+                "relative flex items-center justify-center transition-all duration-500 ease-out rounded-full " +
+                composerSize
+              }
+              style={{
+                backgroundColor: text ? "#1a1400" : CARD,
+                border: text ? "none" : "2px solid " + BORDER,
+                margin: text ? "5px" : "0px",
+              }}
+            >
+              <textarea
+                className="bg-transparent text-center w-full h-full outline-none resize-none text-sm font-bold p-4"
+                style={{ color: text ? GOLD : WHITE }}
+                placeholder="I stand for..."
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
@@ -398,11 +451,11 @@ export default function Home() {
               <button
                 key={c.name}
                 onClick={() => setCategory(c.name)}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs border transition-colors"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold"
                 style={
                   active
-                    ? { borderColor: c.color, color: c.color, backgroundColor: "#20232e" }
-                    : { borderColor: "#3a2c40", color: "#9b7fa3", backgroundColor: "transparent" }
+                    ? { border: "1.5px solid " + c.color, color: c.color, backgroundColor: CARD }
+                    : { border: "1.5px solid " + BORDER, color: MUTED, backgroundColor: "transparent" }
                 }
               >
                 <CIcon size={13} />
@@ -414,71 +467,112 @@ export default function Home() {
 
         <button
           onClick={handlePost}
-          className="w-full bg-[#d9a668] text-[#2b1f0f] p-3 rounded-full font-medium mb-8 flex items-center justify-center gap-2"
+          className="w-full p-3 rounded-full font-bold uppercase tracking-wide mb-6 flex items-center justify-center gap-2"
+          style={{ backgroundColor: RED, color: WHITE }}
         >
           <Send size={15} />
           File this stand
         </button>
 
+        <div className="flex gap-2 overflow-x-auto mb-4 pb-1">
+          <button
+            onClick={() => setFilter("All")}
+            className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-bold"
+            style={
+              filter === "All"
+                ? { backgroundColor: WHITE, color: "#0a0a0a" }
+                : { border: "1px solid " + BORDER, color: MUTED }
+            }
+          >
+            All
+          </button>
+          {CAUSES.map((c) => (
+            <button
+              key={c.name}
+              onClick={() => setFilter(c.name)}
+              className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-bold"
+              style={
+                filter === c.name
+                  ? { backgroundColor: c.color, color: "#0a0a0a" }
+                  : { border: "1px solid " + BORDER, color: MUTED }
+              }
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+
         {loadingStands && (
-          <p className="text-[#6b6f80] text-sm text-center py-10">
+          <p className="text-sm text-center py-10" style={{ color: MUTED }}>
             Loading the wall...
           </p>
         )}
 
-        {!loadingStands && stands.length === 0 && (
+        {!loadingStands && visibleStands.length === 0 && (
           <div className="text-center py-14">
-            <Landmark size={32} color="#4a3650" className="mx-auto mb-3" />
-            <p className="text-[#9b7fa3] text-sm">
-              No one has filed a stand yet.
-            </p>
-            <p className="text-[#6b6f80] text-xs mt-1">Be the first.</p>
+            <Flame size={32} color={BORDER} className="mx-auto mb-3" />
+            <p className="text-sm" style={{ color: MUTED }}>No stands here yet.</p>
+            <p className="text-xs mt-1" style={{ color: BORDER }}>Be the first.</p>
           </div>
         )}
 
-        {stands.map((s) => {
+        {visibleStands.map((s) => {
           const supported = mySupports.includes(s.id);
           const isMine = s.user_id === session.user.id;
           const cause = causeFor(s.category);
           const CIcon = cause.Icon;
+          const isMilestone = s.support_count >= 10;
+          const momentumPct = Math.min(s.support_count * 8, 100);
           return (
             <div
               key={s.id}
-              className="bg-[#241b28] border border-[#3a2c40] p-4 mb-4"
-              style={{ borderLeft: "4px solid " + cause.color }}
+              className={"rounded-lg p-4 mb-4 " + (isMilestone ? "animate-milestone" : "")}
+              style={{ backgroundColor: CARD, borderLeft: "4px solid " + cause.color }}
             >
-              <span
-                className="inline-flex items-center gap-1 text-xs px-3 py-1 rounded-full mb-2 border"
-                style={{ borderColor: cause.color, color: cause.color }}
-              >
-                <CIcon size={12} />
-                {s.category || "General"}
-              </span>
-              <p className="text-[#f0e8d8] mb-3" style={{ fontFamily: "Georgia, serif" }}>
-                {s.text}
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <span
+                  className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full"
+                  style={{ border: "1px solid " + cause.color, color: cause.color }}
+                >
+                  <CIcon size={12} />
+                  {s.category || "General"}
+                </span>
+                {isMilestone && <Trophy size={16} color={GOLD} />}
+              </div>
+              <p className="mb-3 font-medium" style={{ color: WHITE }}>{s.text}</p>
+
+              <div className="mb-2">
+                <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: BORDER }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ width: momentumPct + "%", background: "linear-gradient(to right, " + RED + ", " + GOLD + ")" }}
+                  />
+                </div>
+              </div>
+
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => handleSupport(s.id, s.support_count)}
                     disabled={supported}
-                    className={
+                    className="w-10 h-10 rounded-full flex items-center justify-center"
+                    style={
                       supported
-                        ? "w-10 h-10 rounded-full flex items-center justify-center border transition-colors bg-[#c23b32] border-[#e0574c] text-[#2b0e0b]"
-                        : "w-10 h-10 rounded-full flex items-center justify-center border transition-colors bg-[#2a2534] border-[#4a3650] text-[#b09bb8]"
+                        ? { backgroundColor: RED, border: "2px solid " + RED }
+                        : { backgroundColor: "transparent", border: "2px solid " + WHITE }
                     }
-                    aria-label="Stand with this"
                   >
                     ✊
                   </button>
-                  <span className="text-[#c9a5d1] text-sm">
+                  <span className="text-sm font-bold" style={{ color: GOLD }}>
                     {s.support_count} standing with this
                   </span>
                 </div>
                 {isMine && (
                   <button
                     onClick={() => handleResolve(s.id)}
-                    className="bg-[#2e4535] text-[#a8d9bf] text-xs px-3 py-2 rounded flex items-center gap-1"
+                    className="text-xs px-3 py-2 rounded flex items-center gap-1 font-bold"
+                    style={{ border: "1px solid " + GOLD, color: GOLD }}
                   >
                     <CheckCircle2 size={13} />
                     Resolved
@@ -487,24 +581,26 @@ export default function Home() {
               </div>
               <button
                 onClick={() => toggleComments(s.id)}
-                className="text-[#9b7fa3] text-xs flex items-center gap-1"
+                className="text-xs flex items-center gap-1"
+                style={{ color: MUTED }}
               >
                 <MessageCircle size={13} />
                 {openComments[s.id] ? "Hide responses" : "View responses"}
               </button>
               {openComments[s.id] && (
-                <div className="mt-3 pt-3 border-t border-[#3a2c40]">
+                <div className="mt-3 pt-3" style={{ borderTop: "1px solid " + BORDER }}>
                   {(comments[s.id] || []).map((c) => (
                     <div key={c.id} className="mb-2">
-                      <span className="text-[#d9a668] text-xs">
+                      <span className="text-xs font-bold" style={{ color: GOLD }}>
                         @{commenterNames[c.user_id] || "..."}
                       </span>
-                      <p className="text-[#e8e4da] text-sm">{c.text}</p>
+                      <p className="text-sm" style={{ color: WHITE }}>{c.text}</p>
                     </div>
                   ))}
                   <div className="flex gap-2 mt-2">
                     <input
-                      className="flex-1 bg-[#1c1521] border border-[#3a2c40] text-[#f0e8d8] text-sm p-2 rounded"
+                      className="flex-1 text-sm p-2 rounded"
+                      style={{ backgroundColor: BG, border: "1px solid " + BORDER, color: WHITE }}
                       placeholder="Add a response"
                       value={commentText[s.id] || ""}
                       onChange={(e) =>
@@ -513,7 +609,8 @@ export default function Home() {
                     />
                     <button
                       onClick={() => handleComment(s.id)}
-                      className="bg-[#d9a668] text-[#2b1f0f] text-sm px-3 rounded"
+                      className="text-sm px-3 rounded font-bold"
+                      style={{ backgroundColor: RED, color: WHITE }}
                     >
                       Send
                     </button>
@@ -525,20 +622,23 @@ export default function Home() {
         })}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-[#1c1521] border-t border-[#3a2c40] flex justify-around py-3">
-        <div className="flex flex-col items-center text-[#d9a668]">
+      <div
+        className="fixed bottom-0 left-0 right-0 flex justify-around py-3"
+        style={{ backgroundColor: CARD, borderTop: "1px solid " + BORDER }}
+      >
+        <div className="flex flex-col items-center" style={{ color: RED }}>
           <HomeIcon size={20} />
-          <span className="text-[10px] mt-1">Wall</span>
+          <span className="text-[10px] mt-1 font-bold">Wall</span>
         </div>
         {profile && (
-          <a href={"/profile/" + profile.username} className="flex flex-col items-center text-[#9b7fa3]">
+          <a href={"/profile/" + profile.username} className="flex flex-col items-center" style={{ color: MUTED }}>
             <User size={20} />
-            <span className="text-[10px] mt-1">Profile</span>
+            <span className="text-[10px] mt-1 font-bold">Profile</span>
           </a>
         )}
-        <button onClick={handleLogOut} className="flex flex-col items-center text-[#9b7fa3]">
+        <button onClick={handleLogOut} className="flex flex-col items-center" style={{ color: MUTED }}>
           <LogOut size={20} />
-          <span className="text-[10px] mt-1">Log out</span>
+          <span className="text-[10px] mt-1 font-bold">Log out</span>
         </button>
       </div>
     </div>
