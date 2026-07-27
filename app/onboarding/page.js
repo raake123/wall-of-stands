@@ -11,6 +11,7 @@ import {
   Hammer,
   Landmark,
   Cloud,
+  MapPin,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useTheme } from "../lib/theme-context";
@@ -36,6 +37,9 @@ export default function Onboarding() {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [causes, setCauses] = useState([]);
+  const [homeLocation, setHomeLocation] = useState("");
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -48,6 +52,37 @@ export default function Onboarding() {
     );
   }
 
+  function detectLocation() {
+    setLocationError("");
+    if (!navigator.geolocation) {
+      setLocationError("Location isn't supported here — type your area instead.");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await res.json();
+          if (data.display_name) {
+            setHomeLocation(data.display_name.split(",").slice(0, 3).join(",").trim());
+          }
+        } catch {
+          setLocationError("Couldn't look that up — type your area instead.");
+        }
+        setLocating(false);
+      },
+      () => {
+        setLocating(false);
+        setLocationError("Location denied — type your area instead.");
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+    );
+  }
+
   async function finish() {
     setError("");
     const { error } = await supabase.from("profiles").insert({
@@ -55,6 +90,7 @@ export default function Onboarding() {
       name,
       username,
       causes,
+      home_location: homeLocation.trim() || null,
     });
     if (error) {
       setError(
@@ -83,7 +119,7 @@ export default function Onboarding() {
 
   const StepDots = (
     <div className="flex items-center gap-2 mb-8">
-      {[1, 2, 3].map((n) => (
+      {[1, 2, 3, 4].map((n) => (
         <div
           key={n}
           className="h-1.5 rounded-full transition-all duration-300"
@@ -202,6 +238,54 @@ export default function Onboarding() {
               </button>
               <button
                 disabled={causes.length === 0}
+                onClick={() => setStep(4)}
+                className="flex-1 p-3 rounded-full font-bold uppercase tracking-wide disabled:opacity-30"
+                style={{ backgroundColor: RED, color: "#fff" }}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div>
+            <h1 className="text-3xl font-black uppercase tracking-tight mb-1" style={{ color: WHITE }}>
+              Where do you <span style={{ color: RED }}>stand from</span>?
+            </h1>
+            <p className="text-sm mb-4" style={{ color: MUTED }}>
+              Your area is shown with your voice, so people know whether an issue is
+              being raised by locals or supported from outside.
+            </p>
+            <input
+              className="w-full p-3 rounded mb-2"
+              style={inputStyle}
+              placeholder="e.g. Ambattur, Chennai"
+              value={homeLocation}
+              maxLength={120}
+              onChange={(e) => setHomeLocation(e.target.value)}
+            />
+            <button
+              onClick={detectLocation}
+              disabled={locating}
+              className="text-xs font-bold flex items-center gap-1 mb-4 disabled:opacity-50"
+              style={{ color: GOLD }}
+            >
+              <MapPin size={13} />
+              {locating ? "Detecting..." : "Use my current location"}
+            </button>
+            {locationError && <p className="text-xs mb-3" style={{ color: RED }}>{locationError}</p>}
+            {error && <p className="text-sm mb-2" style={{ color: RED }}>{error}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setStep(3)}
+                className="px-5 p-3 rounded-full font-bold uppercase tracking-wide"
+                style={{ border: "1px solid " + BORDER, color: MUTED }}
+              >
+                Back
+              </button>
+              <button
+                disabled={!homeLocation.trim()}
                 onClick={finish}
                 className="flex-1 p-3 rounded-full font-bold uppercase tracking-wide disabled:opacity-30"
                 style={{ backgroundColor: GOLD, color: "#1a1400" }}

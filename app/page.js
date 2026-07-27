@@ -7,7 +7,8 @@ import {
   LogOut,
   User,
   Target,
-  MessageCircle,
+  Mic,
+  Clock,
   CheckCircle2,
   Home as HomeIcon,
   Trophy,
@@ -28,9 +29,19 @@ import { supabase } from "./lib/supabase";
 import { useTheme } from "./lib/theme-context";
 import { CAUSES, causeFor, tierFor } from "./lib/causes";
 
+function formatWhen(ts) {
+  if (!ts) return "";
+  return new Date(ts).toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 const TEXT_LIMIT = 120;
 const DETAILS_LIMIT = 2000;
-const COMMENT_LIMIT = 300;
 const TAGLINE_LIMIT = 80;
 
 export default function Home() {
@@ -75,10 +86,7 @@ export default function Home() {
   const [showTagline, setShowTagline] = useState(false);
   const [postError, setPostError] = useState("");
 
-  const [openComments, setOpenComments] = useState({});
-  const [comments, setComments] = useState({});
-  const [commentText, setCommentText] = useState({});
-  const [commenterNames, setCommenterNames] = useState({});
+  const [voiceCounts, setVoiceCounts] = useState({});
 
   useEffect(() => {
     setMounted(true);
@@ -90,6 +98,7 @@ export default function Home() {
       }
     });
     loadStands();
+    loadVoiceCounts();
     return () => listener.subscription.unsubscribe();
   }, []);
 
@@ -346,42 +355,13 @@ export default function Home() {
     loadStands();
   }
 
-  async function toggleComments(standId) {
-    const isOpen = openComments[standId];
-    setOpenComments({ ...openComments, [standId]: !isOpen });
-    if (!isOpen && !comments[standId]) {
-      const { data } = await supabase
-        .from("comments")
-        .select("*")
-        .eq("stand_id", standId)
-        .order("created_at", { ascending: true });
-      setComments({ ...comments, [standId]: data || [] });
-      const ids = [...new Set((data || []).map((c) => c.user_id))];
-      if (ids.length) {
-        const { data: profs } = await supabase
-          .from("profiles")
-          .select("id, username")
-          .in("id", ids);
-        const map = { ...commenterNames };
-        (profs || []).forEach((p) => {
-          map[p.id] = p.username;
-        });
-        setCommenterNames(map);
-      }
-    }
-  }
-
-  async function handleComment(standId) {
-    const txt = commentText[standId];
-    if (!txt || !txt.trim()) return;
-    await supabase.from("comments").insert({ stand_id: standId, user_id: session.user.id, text: txt });
-    setCommentText({ ...commentText, [standId]: "" });
-    const { data } = await supabase
-      .from("comments")
-      .select("*")
-      .eq("stand_id", standId)
-      .order("created_at", { ascending: true });
-    setComments({ ...comments, [standId]: data || [] });
+  async function loadVoiceCounts() {
+    const { data } = await supabase.from("voices").select("stand_id");
+    const counts = {};
+    (data || []).forEach((v) => {
+      counts[v.stand_id] = (counts[v.stand_id] || 0) + 1;
+    });
+    setVoiceCounts(counts);
   }
 
   const ThemeToggle = (
@@ -980,12 +960,18 @@ export default function Home() {
               {s.audio_url && (
                 <audio src={s.audio_url} controls className="w-full mb-3" />
               )}
-              {s.location_label && (
-                <p className="text-xs flex items-center gap-1 mb-2" style={{ color: MUTED }}>
-                  <MapPin size={12} />
-                  {s.location_label}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
+                {s.location_label && (
+                  <p className="text-xs flex items-center gap-1" style={{ color: MUTED }}>
+                    <MapPin size={12} />
+                    {s.location_label}
+                  </p>
+                )}
+                <p className="text-xs flex items-center gap-1" style={{ color: MUTED }}>
+                  <Clock size={12} />
+                  {formatWhen(s.created_at)}
                 </p>
-              )}
+              </div>
 
               <div className="mb-2">
                 <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: BORDER }}>
@@ -1026,14 +1012,16 @@ export default function Home() {
                 )}
               </div>
               <div className="flex items-center justify-between">
-                <button
-                  onClick={() => toggleComments(s.id)}
-                  className="text-xs flex items-center gap-1"
-                  style={{ color: MUTED }}
+                <Link
+                  href={`/stand/${s.id}`}
+                  className="text-xs flex items-center gap-1 font-bold"
+                  style={{ color: voiceCounts[s.id] ? RED : MUTED }}
                 >
-                  <MessageCircle size={13} />
-                  {openComments[s.id] ? "Hide responses" : "View responses"}
-                </button>
+                  <Mic size={13} />
+                  {voiceCounts[s.id]
+                    ? `${voiceCounts[s.id]} ${voiceCounts[s.id] === 1 ? "voice" : "voices"}`
+                    : "Speak out"}
+                </Link>
                 <Link
                   href={`/stand/${s.id}`}
                   className="text-xs font-bold flex items-center gap-1"
@@ -1043,42 +1031,6 @@ export default function Home() {
                   <ChevronRight size={13} />
                 </Link>
               </div>
-              {openComments[s.id] && (
-                <div className="mt-3 pt-3" style={{ borderTop: "1px solid " + BORDER }}>
-                  {(comments[s.id] || []).map((c) => (
-                    <div key={c.id} className="mb-2">
-                      <span className="text-xs font-bold" style={{ color: GOLD }}>
-                        @{commenterNames[c.user_id] || "..."}
-                      </span>
-                      <p
-                        className="text-sm"
-                        style={{ color: WHITE, wordBreak: "break-word", overflowWrap: "anywhere" }}
-                      >
-                        {c.text}
-                      </p>
-                    </div>
-                  ))}
-                  <div className="flex gap-2 mt-2">
-                    <input
-                      className="flex-1 text-sm p-2 rounded"
-                      style={{ backgroundColor: BG, border: "1px solid " + BORDER, color: WHITE }}
-                      placeholder="Add a response"
-                      value={commentText[s.id] || ""}
-                      maxLength={COMMENT_LIMIT}
-                      onChange={(e) =>
-                        setCommentText({ ...commentText, [s.id]: e.target.value })
-                      }
-                    />
-                    <button
-                      onClick={() => handleComment(s.id)}
-                      className="text-sm px-3 rounded font-bold"
-                      style={{ backgroundColor: RED, color: "#fff" }}
-                    >
-                      Send
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}
