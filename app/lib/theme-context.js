@@ -10,6 +10,7 @@ export const DARK = {
   BORDER: "#2a2a2a",
   RED: "#ef233c",
   GOLD: "#ffd60a",
+  GREEN: "#2ecc71",
   WHITE: "#f5f0e6",
   MUTED: "#8a8a8a",
 };
@@ -22,6 +23,7 @@ export const LIGHT = {
   BORDER: "#e2d9c3",
   RED: "#d62839",
   GOLD: "#a8790a",
+  GREEN: "#1a8f4c",
   WHITE: "#12100c",
   MUTED: "#726a55",
 };

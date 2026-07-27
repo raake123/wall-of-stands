@@ -2,30 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Leaf,
-  GraduationCap,
-  Heart,
-  Scale,
-  Home as HomeIcon,
-  Hammer,
-  Landmark,
-  Cloud,
-  MapPin,
-} from "lucide-react";
+import { MapPin } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useTheme } from "../lib/theme-context";
-
-const CAUSES = [
-  { name: "Environment", color: "#2ecc71", Icon: Leaf },
-  { name: "Education", color: "#4cc9f0", Icon: GraduationCap },
-  { name: "Health", color: "#ff4d6d", Icon: Heart },
-  { name: "Justice", color: "#ffd60a", Icon: Scale },
-  { name: "Housing", color: "#f77f00", Icon: HomeIcon },
-  { name: "Labor", color: "#adb5bd", Icon: Hammer },
-  { name: "Democracy", color: "#9d4edd", Icon: Landmark },
-  { name: "Climate", color: "#06d6a0", Icon: Cloud },
-];
+import { detectLocation, formatLocation, emptyLocation } from "../lib/location";
+import { CAUSES } from "../lib/causes";
 
 export default function Onboarding() {
   const router = useRouter();
@@ -37,7 +18,7 @@ export default function Onboarding() {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [causes, setCauses] = useState([]);
-  const [homeLocation, setHomeLocation] = useState("");
+  const [home, setHome] = useState(emptyLocation());
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState("");
   const [error, setError] = useState("");
@@ -52,35 +33,15 @@ export default function Onboarding() {
     );
   }
 
-  function detectLocation() {
+  async function handleDetect() {
     setLocationError("");
-    if (!navigator.geolocation) {
-      setLocationError("Location isn't supported here — type your area instead.");
-      return;
-    }
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
-          );
-          const data = await res.json();
-          if (data.display_name) {
-            setHomeLocation(data.display_name.split(",").slice(0, 3).join(",").trim());
-          }
-        } catch {
-          setLocationError("Couldn't look that up — type your area instead.");
-        }
-        setLocating(false);
-      },
-      () => {
-        setLocating(false);
-        setLocationError("Location denied — type your area instead.");
-      },
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
-    );
+    try {
+      setHome(await detectLocation());
+    } catch (e) {
+      setLocationError(e.message + " You can type your area below instead.");
+    }
+    setLocating(false);
   }
 
   async function finish() {
@@ -90,7 +51,11 @@ export default function Onboarding() {
       name,
       username,
       causes,
-      home_location: homeLocation.trim() || null,
+      home_area: home.area.trim() || null,
+      home_city: home.city.trim() || null,
+      home_state: home.state.trim() || null,
+      home_country: home.country.trim() || null,
+      home_location: formatLocation(home) || null,
     });
     if (error) {
       setError(
@@ -257,26 +222,46 @@ export default function Onboarding() {
               Your area is shown with your voice, so people know whether an issue is
               being raised by locals or supported from outside.
             </p>
-            <input
-              className="w-full p-3 rounded mb-2"
-              style={inputStyle}
-              placeholder="e.g. Ambattur, Chennai"
-              value={homeLocation}
-              maxLength={120}
-              onChange={(e) => setHomeLocation(e.target.value)}
-            />
             <button
-              onClick={detectLocation}
+              onClick={handleDetect}
               disabled={locating}
-              className="text-xs font-bold flex items-center gap-1 mb-4 disabled:opacity-50"
-              style={{ color: GOLD }}
+              className="w-full py-2.5 rounded-full mb-4 flex items-center justify-center gap-1.5 text-[11px] font-black uppercase tracking-wide disabled:opacity-50"
+              style={{ border: "1.5px solid " + GOLD, color: GOLD, backgroundColor: CARD }}
             >
-              <MapPin size={13} />
+              <MapPin size={14} />
               {locating ? "Detecting..." : "Use my current location"}
             </button>
             {locationError && <p className="text-xs mb-3" style={{ color: RED }}>{locationError}</p>}
-            {error && <p className="text-sm mb-2" style={{ color: RED }}>{error}</p>}
-            <div className="flex gap-2">
+
+            {[
+              { key: "area", label: "Area / neighbourhood", ph: "e.g. Ayapakkam" },
+              { key: "city", label: "City / district", ph: "e.g. Chennai" },
+              { key: "state", label: "State", ph: "e.g. Tamil Nadu" },
+              { key: "country", label: "Country", ph: "e.g. India" },
+            ].map((f) => (
+              <div key={f.key} className="mb-2">
+                <label className="text-[10px] font-black uppercase tracking-wide" style={{ color: MUTED }}>
+                  {f.label}
+                </label>
+                <input
+                  className="w-full p-2.5 rounded mt-1"
+                  style={inputStyle}
+                  placeholder={f.ph}
+                  value={home[f.key]}
+                  maxLength={80}
+                  onChange={(e) => setHome({ ...home, [f.key]: e.target.value })}
+                />
+              </div>
+            ))}
+
+            {formatLocation(home) && (
+              <p className="text-xs mt-3 mb-1" style={{ color: GOLD, wordBreak: "break-word" }}>
+                You'll show as: {formatLocation(home)}
+              </p>
+            )}
+
+            {error && <p className="text-sm mb-2 mt-2" style={{ color: RED }}>{error}</p>}
+            <div className="flex gap-2 mt-4">
               <button
                 onClick={() => setStep(3)}
                 className="px-5 p-3 rounded-full font-bold uppercase tracking-wide"
@@ -285,7 +270,7 @@ export default function Onboarding() {
                 Back
               </button>
               <button
-                disabled={!homeLocation.trim()}
+                disabled={!home.area.trim() && !home.city.trim()}
                 onClick={finish}
                 className="flex-1 p-3 rounded-full font-bold uppercase tracking-wide disabled:opacity-30"
                 style={{ backgroundColor: GOLD, color: "#1a1400" }}

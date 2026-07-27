@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowLeft,
   MapPin,
@@ -13,11 +14,13 @@ import {
   Plus,
   Users,
   Globe,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme-context";
+import { useAuth } from "../../lib/auth-context";
 import { causeFor, tierFor } from "../../lib/causes";
-import { isInsideArea, shortArea } from "../../lib/location";
+import { isInsideArea, formatLocation, locOf } from "../../lib/location";
 import VoiceRecorder from "../../components/VoiceRecorder";
 
 function formatWhen(ts) {
@@ -31,14 +34,23 @@ function formatWhen(ts) {
   });
 }
 
+function homeLocOf(p) {
+  if (!p) return null;
+  return {
+    area: p.home_area || "",
+    city: p.home_city || "",
+    state: p.home_state || "",
+    country: p.home_country || "",
+  };
+}
+
 export default function StandDetail() {
   const params = useParams();
   const router = useRouter();
   const { colors } = useTheme();
-  const { RED, GOLD, WHITE, BG, CARD, BORDER, MUTED } = colors;
+  const { RED, GOLD, GREEN, WHITE, BG, CARD, BORDER, MUTED } = colors;
+  const { session, profile } = useAuth();
 
-  const [session, setSession] = useState(null);
-  const [profile, setProfile] = useState(null);
   const [stand, setStand] = useState(null);
   const [author, setAuthor] = useState(null);
   const [supported, setSupported] = useState(false);
@@ -55,23 +67,14 @@ export default function StandDetail() {
   const [voiceError, setVoiceError] = useState("");
   const [notFound, setNotFound] = useState(false);
   const [mediaFailed, setMediaFailed] = useState(false);
+  const [draftProgress, setDraftProgress] = useState(0);
+  const [savingProgress, setSavingProgress] = useState(false);
 
   useEffect(() => {
     load();
-  }, [params.id]);
+  }, [params.id, session]);
 
   async function load() {
-    const { data: sess } = await supabase.auth.getSession();
-    setSession(sess?.session || null);
-    if (sess?.session) {
-      const { data: me } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", sess.session.user.id)
-        .maybeSingle();
-      setProfile(me);
-    }
-
     const { data: s } = await supabase.from("stands").select("*").eq("id", params.id).maybeSingle();
     if (!s) {
       setNotFound(true);
@@ -79,20 +82,21 @@ export default function StandDetail() {
     }
     setStand(s);
     setDetails(s.details || "");
+    setDraftProgress(s.progress || 0);
 
     const { data: prof } = await supabase
       .from("profiles")
-      .select("name, username, causes, home_location")
+      .select("name, username, causes, home_area, home_city, home_state, home_country")
       .eq("id", s.user_id)
       .maybeSingle();
     setAuthor(prof);
 
-    if (sess?.session) {
+    if (session) {
       const { data: sup } = await supabase
         .from("supports")
         .select("id")
         .eq("stand_id", s.id)
-        .eq("user_id", sess.session.user.id)
+        .eq("user_id", session.user.id)
         .maybeSingle();
       setSupported(Boolean(sup));
     }
@@ -103,11 +107,12 @@ export default function StandDetail() {
       .eq("stand_id", s.id)
       .order("created_at", { ascending: false });
     setVoices(vs || []);
+
     const ids = [...new Set((vs || []).map((v) => v.user_id))];
     if (ids.length) {
       const { data: profs } = await supabase
         .from("profiles")
-        .select("id, name, username, home_location")
+        .select("id, name, username, home_area, home_city, home_state, home_country")
         .in("id", ids);
       const map = {};
       (profs || []).forEach((p) => {
@@ -125,20 +130,39 @@ export default function StandDetail() {
   }
 
   async function handleSupport() {
-    if (!session || supported) return;
+    if (!session || supported || stand.resolved_at) return;
     setSupported(true);
-    const { error } = await supabase.from("supports").insert({ stand_id: stand.id, user_id: session.user.id });
+    const me = homeLocOf(profile) || {};
+    const inside = isInsideArea(locOf(stand), me);
+    const { error } = await supabase.from("supports").insert({
+      stand_id: stand.id,
+      user_id: session.user.id,
+      area: me.area || null,
+      city: me.city || null,
+      state: me.state || null,
+      country: me.country || null,
+    });
     if (error) {
       setSupported(false);
       return;
     }
-    await supabase.rpc("increment_support", { stand_id_param: stand.id });
+    await supabase.rpc("increment_support", { stand_id_param: stand.id, is_inside: inside });
     load();
   }
 
-  async function handleResolve() {
-    await supabase.from("stands").delete().eq("id", stand.id);
-    router.push("/");
+  async function saveProgress(value, resolve = false) {
+    setSavingProgress(true);
+    const patch = { progress: value };
+    if (resolve) {
+      patch.progress = 100;
+      patch.resolved_at = new Date().toISOString();
+    }
+    const { error } = await supabase.from("stands").update(patch).eq("id", stand.id);
+    setSavingProgress(false);
+    if (!error) {
+      if (resolve) router.push("/resolved");
+      else load();
+    }
   }
 
   async function handleSaveDetails() {
@@ -174,11 +198,16 @@ export default function StandDetail() {
       return;
     }
     const audio_url = supabase.storage.from("stand-media").getPublicUrl(path).data.publicUrl;
+    const me = homeLocOf(profile) || {};
     const { error: insErr } = await supabase.from("voices").insert({
       stand_id: stand.id,
       user_id: session.user.id,
       audio_url,
-      location_label: profile?.home_location || null,
+      area: me.area || null,
+      city: me.city || null,
+      state: me.state || null,
+      country: me.country || null,
+      location_label: formatLocation(me) || null,
     });
     if (insErr) setVoiceError(insErr.message);
     setPostingVoice(false);
@@ -189,8 +218,8 @@ export default function StandDetail() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: BG }}>
         <div className="text-center">
-          <p className="mb-3" style={{ color: MUTED }}>This stand doesn't exist or was resolved.</p>
-          <a href="/" className="text-sm font-bold" style={{ color: GOLD }}>Back to the wall</a>
+          <p className="mb-3" style={{ color: MUTED }}>This stand doesn't exist.</p>
+          <Link href="/" className="text-sm font-bold" style={{ color: GOLD }}>Back to the wall</Link>
         </div>
       </div>
     );
@@ -207,32 +236,52 @@ export default function StandDetail() {
   const cause = causeFor(stand.category);
   const CIcon = cause.Icon;
   const tier = tierFor(stand.support_count);
-  const momentumPct = Math.min(stand.support_count * 6, 100);
+  const momentumPct = Math.min((stand.support_count || 0) * 6, 100);
   const isMine = session && stand.user_id === session.user.id;
   const initial = author ? author.name.charAt(0).toUpperCase() : "?";
+  const standLoc = locOf(stand);
+  const standLocText = formatLocation(standLoc) || stand.location_label || "";
+  const isResolved = Boolean(stand.resolved_at);
 
-  const insideVoices = voices.filter((v) =>
-    isInsideArea(stand.location_label, v.location_label || speakers[v.user_id]?.home_location)
-  );
-  const outsideVoices = voices.filter((v) => !insideVoices.includes(v));
+  const voiceLoc = (v) => {
+    const own = locOf(v);
+    if (own.area || own.city || own.state) return own;
+    return homeLocOf(speakers[v.user_id]) || {};
+  };
+
+  const insideVoices = voices.filter((v) => isInsideArea(standLoc, voiceLoc(v)));
+  const outsideVoices = voices.filter((v) => !isInsideArea(standLoc, voiceLoc(v)));
 
   function VoiceRow({ v }) {
     const sp = speakers[v.user_id];
-    const area = shortArea(v.location_label || sp?.home_location);
+    const loc = voiceLoc(v);
+    const locText = formatLocation(loc) || v.location_label || "";
     return (
       <div className="mb-3 rounded-lg p-3" style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}>
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-start gap-2 mb-2">
           <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
+            className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
             style={{ backgroundColor: GOLD, color: "#1a1400" }}
           >
             {(sp?.name || "?").charAt(0).toUpperCase()}
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-black truncate" style={{ color: WHITE }}>{sp?.name || "Someone"}</p>
-            <p className="text-[10px] truncate" style={{ color: MUTED }}>
-              {area ? `${area} · ` : ""}{formatWhen(v.created_at)}
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-black truncate" style={{ color: WHITE }}>
+              {sp?.name || "Someone"}
             </p>
+            <p className="text-[10px] flex items-center gap-1" style={{ color: MUTED }}>
+              <Clock size={9} className="flex-shrink-0" />
+              {formatWhen(v.created_at)}
+            </p>
+            {locText && (
+              <p
+                className="text-[10px] flex items-start gap-1 mt-0.5"
+                style={{ color: MUTED, wordBreak: "break-word" }}
+              >
+                <MapPin size={9} className="flex-shrink-0 mt-0.5" />
+                {locText}
+              </p>
+            )}
           </div>
         </div>
         <audio src={v.audio_url} controls className="w-full" />
@@ -243,12 +292,12 @@ export default function StandDetail() {
   return (
     <div className="min-h-screen pb-16" style={{ backgroundColor: BG }}>
       <div className="max-w-md mx-auto px-4 py-6">
-        <a href="/" className="text-sm mb-5 inline-flex items-center gap-1 font-bold" style={{ color: MUTED }}>
+        <Link href="/" className="text-sm mb-5 inline-flex items-center gap-1 font-bold" style={{ color: MUTED }}>
           <ArrowLeft size={14} />
           Back to the wall
-        </a>
+        </Link>
 
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-2">
           <span
             className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full"
             style={{ border: "1px solid " + cause.color, color: cause.color }}
@@ -256,24 +305,31 @@ export default function StandDetail() {
             <CIcon size={12} />
             {stand.category || "General"}
           </span>
-          {tier === "movement" && (
+          {isResolved ? (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-1 rounded-full"
+              style={{ backgroundColor: GREEN, color: "#04240f" }}
+            >
+              <CheckCircle2 size={11} /> Resolved
+            </span>
+          ) : tier === "movement" ? (
             <span
               className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-1 rounded-full"
               style={{ backgroundColor: RED, color: "#fff" }}
             >
               <Flame size={11} /> Movement
             </span>
-          )}
-          {tier === "surging" && (
+          ) : tier === "surging" ? (
             <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase" style={{ color: RED }}>
               <Flame size={13} /> Surging
             </span>
-          )}
-          {tier === "milestone" && <Trophy size={16} color={GOLD} />}
+          ) : tier === "milestone" ? (
+            <Trophy size={16} color={GOLD} />
+          ) : null}
         </div>
 
         {author && (
-          <a
+          <Link
             href={`/profile/${author.username}`}
             className="flex items-center gap-3 mb-4 rounded-lg p-3"
             style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}
@@ -288,7 +344,7 @@ export default function StandDetail() {
               <p className="font-black truncate" style={{ color: WHITE }}>{author.name}</p>
               <p className="text-xs truncate" style={{ color: MUTED }}>@{author.username}</p>
             </div>
-          </a>
+          </Link>
         )}
 
         <p
@@ -311,15 +367,26 @@ export default function StandDetail() {
             className="flex items-center gap-1 text-sm font-bold italic mt-2"
             style={{ color: GOLD, wordBreak: "break-word", overflowWrap: "anywhere" }}
           >
-            <Sparkles size={13} />
+            <Sparkles size={13} className="flex-shrink-0" />
             {stand.tagline}
           </p>
         )}
 
-        <p className="flex items-center gap-1 text-xs mt-3 mb-4" style={{ color: MUTED }}>
-          <Clock size={12} />
-          Filed {formatWhen(stand.created_at)}
-        </p>
+        <div className="flex flex-col gap-1 mt-3 mb-4">
+          <p className="flex items-center gap-1 text-xs" style={{ color: MUTED }}>
+            <Clock size={12} className="flex-shrink-0" />
+            Filed {formatWhen(stand.created_at)}
+          </p>
+          {standLocText && (
+            <p
+              className="flex items-start gap-1 text-xs"
+              style={{ color: MUTED, wordBreak: "break-word" }}
+            >
+              <MapPin size={12} className="flex-shrink-0 mt-0.5" />
+              {standLocText}
+            </p>
+          )}
+        </div>
 
         {stand.media_url && !mediaFailed && (
           <div className="mb-4 rounded-lg overflow-hidden">
@@ -340,15 +407,14 @@ export default function StandDetail() {
             )}
           </div>
         )}
-        {stand.audio_url && <audio src={stand.audio_url} controls className="w-full mb-4" />}
-        {stand.location_label && (
-          <p className="text-sm flex items-center gap-1 mb-4" style={{ color: MUTED }}>
-            <MapPin size={14} />
-            {stand.location_label}
+        {stand.media_url && mediaFailed && (
+          <p className="text-xs mb-4" style={{ color: MUTED }}>
+            Attached media couldn't be loaded.
           </p>
         )}
+        {stand.audio_url && <audio src={stand.audio_url} controls className="w-full mb-4" />}
 
-        <div className="mb-4">
+        <div className="mb-2">
           <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: BORDER }}>
             <div
               className="h-full rounded-full transition-all duration-500"
@@ -357,33 +423,96 @@ export default function StandDetail() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleSupport}
-              disabled={supported || !session}
-              className="w-11 h-11 rounded-full flex items-center justify-center"
-              style={
-                supported
-                  ? { backgroundColor: RED, border: "2px solid " + RED }
-                  : { backgroundColor: "transparent", border: "2px solid " + WHITE }
-              }
-            >
-              ✊
-            </button>
-            <span className="text-sm font-bold" style={{ color: GOLD }}>
+        <div className="flex items-center gap-3 mb-6">
+          <button
+            onClick={handleSupport}
+            disabled={supported || !session || isResolved}
+            className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 disabled:opacity-70"
+            style={
+              supported
+                ? { backgroundColor: RED, border: "2px solid " + RED }
+                : { backgroundColor: "transparent", border: "2px solid " + WHITE }
+            }
+          >
+            ✊
+          </button>
+          <div className="min-w-0">
+            <p className="text-sm font-bold leading-tight" style={{ color: GOLD }}>
               {stand.support_count} standing with this
+            </p>
+            <p className="text-[11px] leading-tight" style={{ color: MUTED }}>
+              <span style={{ color: RED, fontWeight: 700 }}>{stand.support_in || 0} in</span>
+              {" · "}
+              <span style={{ fontWeight: 700 }}>{stand.support_out || 0} out</span>
+              {" of the area"}
+            </p>
+          </div>
+        </div>
+
+        {/* Owner-rated progress */}
+        <div className="rounded-lg p-4 mb-6" style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-black uppercase tracking-wide" style={{ color: MUTED }}>
+              Progress on this issue
+            </p>
+            <span className="text-sm font-black" style={{ color: isResolved ? GREEN : GOLD }}>
+              {isResolved ? 100 : draftProgress}%
             </span>
           </div>
-          {isMine && (
-            <button
-              onClick={handleResolve}
-              className="text-xs px-3 py-2 rounded flex items-center gap-1 font-bold"
-              style={{ border: "1px solid " + GOLD, color: GOLD }}
-            >
-              <CheckCircle2 size={13} />
-              Resolved
-            </button>
+
+          <div className="h-2.5 rounded-full overflow-hidden mb-3" style={{ backgroundColor: BORDER }}>
+            <div
+              className="h-full rounded-full transition-all duration-300"
+              style={{
+                width: (isResolved ? 100 : draftProgress) + "%",
+                backgroundColor: isResolved ? GREEN : GOLD,
+              }}
+            />
+          </div>
+
+          {isMine && !isResolved ? (
+            <>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={draftProgress}
+                onChange={(e) => setDraftProgress(Number(e.target.value))}
+                className="w-full mb-3"
+                style={{ accentColor: GOLD }}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => saveProgress(draftProgress)}
+                  disabled={savingProgress || draftProgress === (stand.progress || 0)}
+                  className="flex-1 py-2 rounded-full text-xs font-black uppercase tracking-wide disabled:opacity-40"
+                  style={{ backgroundColor: GOLD, color: "#1a1400" }}
+                >
+                  {savingProgress ? "Saving..." : "Save progress"}
+                </button>
+                <button
+                  onClick={() => saveProgress(100, true)}
+                  disabled={savingProgress}
+                  className="flex-1 py-2 rounded-full text-xs font-black uppercase tracking-wide flex items-center justify-center gap-1 disabled:opacity-40"
+                  style={{ backgroundColor: GREEN, color: "#04240f" }}
+                >
+                  {savingProgress ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                  Resolved
+                </button>
+              </div>
+              <p className="text-[10px] mt-2" style={{ color: MUTED }}>
+                Only you can move this bar. Pushing it to 100% and tapping Resolved closes the stand.
+              </p>
+            </>
+          ) : (
+            <p className="text-[11px]" style={{ color: MUTED }}>
+              {isResolved
+                ? `Marked resolved by the person who filed it on ${formatWhen(stand.resolved_at)}.`
+                : draftProgress > 0
+                ? "The person who filed this stand rates it this far along."
+                : "No movement reported yet by the person who filed this."}
+            </p>
           )}
         </div>
 
@@ -493,6 +622,18 @@ export default function StandDetail() {
           )}
 
           <div className="relative pl-4" style={{ borderLeft: "2px solid " + BORDER }}>
+            {isResolved && (
+              <div className="mb-4 relative">
+                <div
+                  className="absolute w-2.5 h-2.5 rounded-full"
+                  style={{ backgroundColor: GREEN, left: -21.5, top: 5 }}
+                />
+                <p className="text-[10px] font-bold uppercase mb-1" style={{ color: GREEN }}>
+                  {formatWhen(stand.resolved_at)}
+                </p>
+                <p className="text-sm font-bold" style={{ color: GREEN }}>Resolved</p>
+              </div>
+            )}
             {updates.map((u) => (
               <div key={u.id} className="mb-4 relative">
                 <div
@@ -522,7 +663,7 @@ export default function StandDetail() {
             </div>
           </div>
 
-          {updates.length === 0 && (
+          {updates.length === 0 && !isResolved && (
             <p className="text-xs mt-3" style={{ color: MUTED }}>
               No updates yet — nothing has moved on this issue since it was filed.
             </p>
@@ -554,7 +695,7 @@ export default function StandDetail() {
               style={{ color: RED }}
             >
               <Users size={12} />
-              From this area ({insideVoices.length})
+              People from inside the area ({insideVoices.length})
             </p>
             {insideVoices.map((v) => (
               <VoiceRow key={v.id} v={v} />
@@ -569,7 +710,7 @@ export default function StandDetail() {
               style={{ color: MUTED }}
             >
               <Globe size={12} />
-              Standing from elsewhere ({outsideVoices.length})
+              People from outside the area ({outsideVoices.length})
             </p>
             {outsideVoices.map((v) => (
               <VoiceRow key={v.id} v={v} />
