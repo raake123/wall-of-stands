@@ -31,6 +31,7 @@ import { CAUSES, causeFor, tierFor } from "./lib/causes";
 const TEXT_LIMIT = 120;
 const DETAILS_LIMIT = 2000;
 const COMMENT_LIMIT = 300;
+const TAGLINE_LIMIT = 80;
 
 export default function Home() {
   const router = useRouter();
@@ -70,6 +71,8 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const [details, setDetails] = useState("");
   const [showDetails, setShowDetails] = useState(false);
+  const [tagline, setTagline] = useState("");
+  const [showTagline, setShowTagline] = useState(false);
   const [postError, setPostError] = useState("");
 
   const [openComments, setOpenComments] = useState({});
@@ -302,6 +305,7 @@ export default function Home() {
             audio_url,
             location_label: locationLabel || null,
             details: details.trim() || null,
+            tagline: tagline.trim() || null,
           })
           .select()
           .maybeSingle();
@@ -311,6 +315,8 @@ export default function Home() {
         setLocationLabel("");
         setDetails("");
         setShowDetails(false);
+        setTagline("");
+        setShowTagline(false);
         setUploading(false);
         setDropPhase("idle");
         await loadStands();
@@ -729,6 +735,29 @@ export default function Home() {
           </div>
         )}
 
+        {showTagline ? (
+          <div className="mb-3">
+            <input
+              className="w-full p-2.5 rounded text-sm font-bold"
+              style={{ backgroundColor: CARD, border: "1px solid " + GOLD, color: GOLD }}
+              placeholder="A catchy one-liner to hook people in..."
+              value={tagline}
+              maxLength={TAGLINE_LIMIT}
+              onChange={(e) => setTagline(e.target.value)}
+            />
+            <p className="text-right text-[11px] mt-1" style={{ color: MUTED }}>{tagline.length}/{TAGLINE_LIMIT}</p>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowTagline(true)}
+            className="text-xs font-bold flex items-center gap-1 mx-auto mb-3"
+            style={{ color: GOLD }}
+          >
+            <Sparkles size={12} />
+            + Add a tagline (optional)
+          </button>
+        )}
+
         {showDetails ? (
           <div className="mb-4">
             <textarea
@@ -902,12 +931,32 @@ export default function Home() {
                 {tier === "milestone" && <Trophy size={16} color={GOLD} />}
               </div>
               <div className="flex items-start gap-3 mb-3">
-                <p
-                  className="flex-1 font-medium"
-                  style={{ color: WHITE, wordBreak: "break-word", overflowWrap: "anywhere" }}
-                >
-                  {s.text}
-                </p>
+                <div className="flex-1">
+                  <p
+                    className="font-bold inline"
+                    style={{
+                      color: "#1a1400",
+                      backgroundColor: GOLD,
+                      boxDecorationBreak: "clone",
+                      WebkitBoxDecorationBreak: "clone",
+                      padding: "2px 6px",
+                      borderRadius: 4,
+                      wordBreak: "break-word",
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    {s.text}
+                  </p>
+                  {s.tagline && (
+                    <p
+                      className="flex items-center gap-1 text-xs font-bold italic mt-1.5"
+                      style={{ color: GOLD, wordBreak: "break-word", overflowWrap: "anywhere" }}
+                    >
+                      <Sparkles size={11} />
+                      {s.tagline}
+                    </p>
+                  )}
+                </div>
                 {s.media_url && (
                   <Link
                     href={`/stand/${s.id}`}

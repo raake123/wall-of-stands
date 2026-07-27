@@ -9,6 +9,7 @@ import {
   Trophy,
   Flame,
   Send,
+  Sparkles,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme-context";
@@ -197,11 +198,30 @@ export default function StandDetail() {
         )}
 
         <p
-          className="text-xl font-bold mb-4"
-          style={{ color: WHITE, wordBreak: "break-word", overflowWrap: "anywhere" }}
+          className="text-xl font-bold inline mb-1"
+          style={{
+            color: "#1a1400",
+            backgroundColor: GOLD,
+            boxDecorationBreak: "clone",
+            WebkitBoxDecorationBreak: "clone",
+            padding: "3px 8px",
+            borderRadius: 6,
+            wordBreak: "break-word",
+            overflowWrap: "anywhere",
+          }}
         >
           {stand.text}
         </p>
+        {stand.tagline && (
+          <p
+            className="flex items-center gap-1 text-sm font-bold italic mt-2 mb-4"
+            style={{ color: GOLD, wordBreak: "break-word", overflowWrap: "anywhere" }}
+          >
+            <Sparkles size={13} />
+            {stand.tagline}
+          </p>
+        )}
+        {!stand.tagline && <div className="mb-4" />}
 
         {stand.media_url && !mediaFailed && (
           <div className="mb-4 rounded-lg overflow-hidden">
