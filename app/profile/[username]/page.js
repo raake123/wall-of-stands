@@ -119,7 +119,12 @@ export default function ProfilePage() {
             className="rounded-lg p-4 mb-3"
             style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}
           >
-            <p className="mb-2 font-medium" style={{ color: WHITE }}>{s.text}</p>
+            <p
+              className="mb-2 font-medium"
+              style={{ color: WHITE, wordBreak: "break-word", overflowWrap: "anywhere" }}
+            >
+              {s.text}
+            </p>
             <p className="text-xs font-bold" style={{ color: GOLD }}>
               {s.support_count} standing with this
             </p>

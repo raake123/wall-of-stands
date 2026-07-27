@@ -28,6 +28,9 @@ import { supabase } from "./lib/supabase";
 import { useTheme } from "./lib/theme-context";
 import { CAUSES, causeFor, tierFor } from "./lib/causes";
 
+const TEXT_LIMIT = 120;
+const DETAILS_LIMIT = 2000;
+
 export default function Home() {
   const router = useRouter();
   const { colors, theme, toggleTheme } = useTheme();
@@ -64,6 +67,8 @@ export default function Home() {
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [details, setDetails] = useState("");
+  const [showDetails, setShowDetails] = useState(false);
   const [postError, setPostError] = useState("");
 
   const [openComments, setOpenComments] = useState({});
@@ -287,6 +292,7 @@ export default function Home() {
             media_type,
             audio_url,
             location_label: locationLabel || null,
+            details: details.trim() || null,
           })
           .select()
           .maybeSingle();
@@ -294,6 +300,8 @@ export default function Home() {
         clearMedia();
         clearAudio();
         setLocationLabel("");
+        setDetails("");
+        setShowDetails(false);
         setUploading(false);
         setDropPhase("idle");
         await loadStands();
@@ -618,12 +626,16 @@ export default function Home() {
                   style={{ color: text ? GOLD : WHITE, width: "72%", height: "72%", wordBreak: "break-word" }}
                   placeholder="I stand for..."
                   value={text}
+                  maxLength={TEXT_LIMIT}
                   onChange={(e) => setText(e.target.value)}
                 />
               )}
             </div>
           </div>
         </div>
+        <p className="text-center text-[11px] mb-3" style={{ color: text.length >= TEXT_LIMIT ? RED : MUTED }}>
+          {text.length}/{TEXT_LIMIT} — keep it short, add the full story below
+        </p>
 
         <div className="flex justify-center gap-3 mb-3">
           <label
@@ -700,6 +712,28 @@ export default function Home() {
               </div>
             )}
           </div>
+        )}
+
+        {showDetails ? (
+          <div className="mb-4">
+            <textarea
+              className="w-full p-3 rounded text-sm"
+              style={{ backgroundColor: CARD, border: "1px solid " + BORDER, color: WHITE, minHeight: 100 }}
+              placeholder="Add the full story — what happened, why it matters..."
+              value={details}
+              maxLength={DETAILS_LIMIT}
+              onChange={(e) => setDetails(e.target.value)}
+            />
+            <p className="text-right text-[11px] mt-1" style={{ color: MUTED }}>{details.length}/{DETAILS_LIMIT}</p>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowDetails(true)}
+            className="text-xs font-bold block mx-auto mb-4"
+            style={{ color: GOLD }}
+          >
+            + Add the full story (optional)
+          </button>
         )}
 
         <div className="flex flex-wrap gap-2 justify-center mb-4">
@@ -852,17 +886,33 @@ export default function Home() {
                 )}
                 {tier === "milestone" && <Trophy size={16} color={GOLD} />}
               </div>
-              <p className="mb-3 font-medium" style={{ color: WHITE }}>{s.text}</p>
-
-              {s.media_url && (
-                <div className="mb-3 rounded overflow-hidden">
-                  {s.media_type === "video" ? (
-                    <video src={s.media_url} controls className="w-full max-h-80 object-cover" />
-                  ) : (
-                    <img src={s.media_url} alt="" className="w-full max-h-80 object-cover" />
-                  )}
-                </div>
-              )}
+              <div className="flex items-start gap-3 mb-3">
+                <p
+                  className="flex-1 font-medium"
+                  style={{ color: WHITE, wordBreak: "break-word", overflowWrap: "anywhere" }}
+                >
+                  {s.text}
+                </p>
+                {s.media_url && (
+                  <Link
+                    href={`/stand/${s.id}`}
+                    className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 relative"
+                  >
+                    {s.media_type === "video" ? (
+                      <video src={s.media_url} className="w-full h-full object-cover" />
+                    ) : (
+                      <img
+                        src={s.media_url}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                        }}
+                      />
+                    )}
+                  </Link>
+                )}
+              </div>
               {s.audio_url && (
                 <audio src={s.audio_url} controls className="w-full mb-3" />
               )}

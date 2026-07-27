@@ -31,6 +31,7 @@ export default function StandDetail() {
   const [editingDetails, setEditingDetails] = useState(false);
   const [savingDetails, setSavingDetails] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [mediaFailed, setMediaFailed] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -195,16 +196,36 @@ export default function StandDetail() {
           </a>
         )}
 
-        <p className="text-xl font-bold mb-4" style={{ color: WHITE }}>{stand.text}</p>
+        <p
+          className="text-xl font-bold mb-4"
+          style={{ color: WHITE, wordBreak: "break-word", overflowWrap: "anywhere" }}
+        >
+          {stand.text}
+        </p>
 
-        {stand.media_url && (
+        {stand.media_url && !mediaFailed && (
           <div className="mb-4 rounded-lg overflow-hidden">
             {stand.media_type === "video" ? (
-              <video src={stand.media_url} controls className="w-full max-h-[420px] object-cover" />
+              <video
+                src={stand.media_url}
+                controls
+                className="w-full max-h-[420px] object-cover"
+                onError={() => setMediaFailed(true)}
+              />
             ) : (
-              <img src={stand.media_url} alt="" className="w-full max-h-[420px] object-cover" />
+              <img
+                src={stand.media_url}
+                alt=""
+                className="w-full max-h-[420px] object-cover"
+                onError={() => setMediaFailed(true)}
+              />
             )}
           </div>
+        )}
+        {stand.media_url && mediaFailed && (
+          <p className="text-xs mb-4" style={{ color: MUTED }}>
+            Attached media couldn't be loaded (the file may have failed to upload).
+          </p>
         )}
         {stand.audio_url && <audio src={stand.audio_url} controls className="w-full mb-4" />}
         {stand.location_label && (
@@ -269,12 +290,14 @@ export default function StandDetail() {
           {editingDetails ? (
             <div>
               <textarea
-                className="w-full p-3 rounded text-sm mb-2"
+                className="w-full p-3 rounded text-sm mb-1"
                 style={{ backgroundColor: BG, border: "1px solid " + BORDER, color: WHITE, minHeight: 140 }}
                 placeholder="What happened? Give people the full context behind this stand..."
                 value={details}
+                maxLength={2000}
                 onChange={(e) => setDetails(e.target.value)}
               />
+              <p className="text-right text-[11px] mb-2" style={{ color: MUTED }}>{details.length}/2000</p>
               <div className="flex gap-2">
                 <button
                   onClick={() => {
