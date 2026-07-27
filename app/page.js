@@ -22,6 +22,12 @@ import {
   Moon,
   TrendingUp,
   Sparkles,
+  Image as ImageIcon,
+  Video,
+  Music,
+  MapPin,
+  X,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { useTheme } from "./lib/theme-context";
@@ -74,6 +80,15 @@ export default function Home() {
   const [sortMode, setSortMode] = useState("new");
   const [justLandedId, setJustLandedId] = useState(null);
   const [burstId, setBurstId] = useState(null);
+
+  const [mediaFile, setMediaFile] = useState(null);
+  const [mediaType, setMediaType] = useState(null);
+  const [mediaPreview, setMediaPreview] = useState(null);
+  const [audioFile, setAudioFile] = useState(null);
+  const [audioPreview, setAudioPreview] = useState(null);
+  const [locationLabel, setLocationLabel] = useState("");
+  const [locating, setLocating] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const [openComments, setOpenComments] = useState({});
   const [comments, setComments] = useState({});
@@ -185,18 +200,106 @@ export default function Home() {
     setProfile(null);
   }
 
+  function handleMediaSelect(e) {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setMediaFile(file);
+    setMediaType(file.type.startsWith("video") ? "video" : "photo");
+    setMediaPreview(URL.createObjectURL(file));
+  }
+
+  function clearMedia() {
+    setMediaFile(null);
+    setMediaType(null);
+    setMediaPreview(null);
+  }
+
+  function handleAudioSelect(e) {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setAudioFile(file);
+    setAudioPreview(URL.createObjectURL(file));
+  }
+
+  function clearAudio() {
+    setAudioFile(null);
+    setAudioPreview(null);
+  }
+
+  function handleUseLocation() {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await res.json();
+          setLocationLabel(
+            data.display_name
+              ? data.display_name.split(",").slice(0, 3).join(",")
+              : `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`
+          );
+        } catch {
+          setLocationLabel(`${latitude.toFixed(3)}, ${longitude.toFixed(3)}`);
+        }
+        setLocating(false);
+      },
+      () => setLocating(false)
+    );
+  }
+
   async function handlePost() {
     if (!text.trim() || dropPhase !== "idle") return;
     setDropPhase("forming");
     setTimeout(() => {
       setDropPhase("falling");
       setTimeout(async () => {
+        setUploading(true);
+        let media_url = null;
+        let media_type = null;
+        let audio_url = null;
+        try {
+          if (mediaFile) {
+            const ext = mediaFile.name.split(".").pop();
+            const path = `${session.user.id}/${Date.now()}-media.${ext}`;
+            const { error: upErr } = await supabase.storage.from("stand-media").upload(path, mediaFile);
+            if (!upErr) {
+              media_url = supabase.storage.from("stand-media").getPublicUrl(path).data.publicUrl;
+              media_type = mediaType;
+            }
+          }
+          if (audioFile) {
+            const ext = audioFile.name.split(".").pop();
+            const path = `${session.user.id}/${Date.now()}-audio.${ext}`;
+            const { error: upErr } = await supabase.storage.from("stand-media").upload(path, audioFile);
+            if (!upErr) {
+              audio_url = supabase.storage.from("stand-media").getPublicUrl(path).data.publicUrl;
+            }
+          }
+        } catch {}
         const { data } = await supabase
           .from("stands")
-          .insert({ text, user_id: session.user.id, category })
+          .insert({
+            text,
+            user_id: session.user.id,
+            category,
+            media_url,
+            media_type,
+            audio_url,
+            location_label: locationLabel || null,
+          })
           .select()
           .maybeSingle();
         setText("");
+        clearMedia();
+        clearAudio();
+        setLocationLabel("");
+        setUploading(false);
         setDropPhase("idle");
         await loadStands();
         if (data) {
@@ -527,6 +630,76 @@ export default function Home() {
           </div>
         </div>
 
+        <div className="flex justify-center gap-3 mb-3">
+          <label
+            className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer"
+            style={{ border: "1px solid " + BORDER, color: mediaFile ? GOLD : MUTED, backgroundColor: CARD }}
+          >
+            {mediaType === "video" ? <Video size={15} /> : <ImageIcon size={15} />}
+            <input type="file" accept="image/*,video/*" className="hidden" onChange={handleMediaSelect} />
+          </label>
+          <label
+            className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer"
+            style={{ border: "1px solid " + BORDER, color: audioFile ? GOLD : MUTED, backgroundColor: CARD }}
+          >
+            <Music size={15} />
+            <input type="file" accept="audio/*" className="hidden" onChange={handleAudioSelect} />
+          </label>
+          <button
+            onClick={handleUseLocation}
+            disabled={locating}
+            className="w-9 h-9 rounded-full flex items-center justify-center"
+            style={{ border: "1px solid " + BORDER, color: locationLabel ? GOLD : MUTED, backgroundColor: CARD }}
+          >
+            {locating ? <Loader2 size={15} className="animate-spin" /> : <MapPin size={15} />}
+          </button>
+        </div>
+
+        {(mediaPreview || audioPreview || locationLabel) && (
+          <div className="flex flex-wrap gap-2 justify-center mb-4">
+            {mediaPreview && (
+              <div
+                className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-full text-xs"
+                style={{ border: "1px solid " + BORDER, color: MUTED }}
+              >
+                {mediaType === "video" ? (
+                  <video src={mediaPreview} className="w-6 h-6 rounded-full object-cover" />
+                ) : (
+                  <img src={mediaPreview} className="w-6 h-6 rounded-full object-cover" alt="" />
+                )}
+                {mediaType === "video" ? "Video attached" : "Photo attached"}
+                <button onClick={clearMedia} style={{ color: RED }}>
+                  <X size={13} />
+                </button>
+              </div>
+            )}
+            {audioPreview && (
+              <div
+                className="flex items-center gap-2 pl-3 pr-1 py-1 rounded-full text-xs"
+                style={{ border: "1px solid " + BORDER, color: MUTED }}
+              >
+                <Music size={12} />
+                Audio attached
+                <button onClick={clearAudio} style={{ color: RED }}>
+                  <X size={13} />
+                </button>
+              </div>
+            )}
+            {locationLabel && (
+              <div
+                className="flex items-center gap-2 pl-3 pr-1 py-1 rounded-full text-xs"
+                style={{ border: "1px solid " + BORDER, color: MUTED }}
+              >
+                <MapPin size={12} />
+                {locationLabel}
+                <button onClick={() => setLocationLabel("")} style={{ color: RED }}>
+                  <X size={13} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2 justify-center mb-4">
           {CAUSES.map((c) => {
             const CIcon = c.Icon;
@@ -551,11 +724,11 @@ export default function Home() {
 
         <button
           onClick={handlePost}
-          disabled={dropping}
+          disabled={dropping || uploading}
           className="w-full p-3 rounded-full font-bold uppercase tracking-wide mb-6 flex items-center justify-center gap-2 disabled:opacity-60"
           style={{ backgroundColor: RED, color: "#fff" }}
         >
-          <Target size={15} />
+          {uploading ? <Loader2 size={15} className="animate-spin" /> : <Target size={15} />}
           Drop This Stand
         </button>
 
@@ -678,6 +851,25 @@ export default function Home() {
                 {tier === "milestone" && <Trophy size={16} color={GOLD} />}
               </div>
               <p className="mb-3 font-medium" style={{ color: WHITE }}>{s.text}</p>
+
+              {s.media_url && (
+                <div className="mb-3 rounded overflow-hidden">
+                  {s.media_type === "video" ? (
+                    <video src={s.media_url} controls className="w-full max-h-80 object-cover" />
+                  ) : (
+                    <img src={s.media_url} alt="" className="w-full max-h-80 object-cover" />
+                  )}
+                </div>
+              )}
+              {s.audio_url && (
+                <audio src={s.audio_url} controls className="w-full mb-3" />
+              )}
+              {s.location_label && (
+                <p className="text-xs flex items-center gap-1 mb-2" style={{ color: MUTED }}>
+                  <MapPin size={12} />
+                  {s.location_label}
+                </p>
+              )}
 
               <div className="mb-2">
                 <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: BORDER }}>
