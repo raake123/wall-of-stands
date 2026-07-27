@@ -2,20 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   LogOut,
   User,
   Target,
   MessageCircle,
   CheckCircle2,
-  Leaf,
-  GraduationCap,
-  Heart,
-  Scale,
   Home as HomeIcon,
-  Hammer,
-  Landmark,
-  Cloud,
   Trophy,
   Flame,
   Sun,
@@ -28,31 +22,11 @@ import {
   MapPin,
   X,
   Loader2,
+  ChevronRight,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { useTheme } from "./lib/theme-context";
-
-const CAUSES = [
-  { name: "Environment", color: "#2ecc71", Icon: Leaf },
-  { name: "Education", color: "#4cc9f0", Icon: GraduationCap },
-  { name: "Health", color: "#ff4d6d", Icon: Heart },
-  { name: "Justice", color: "#ffd60a", Icon: Scale },
-  { name: "Housing", color: "#f77f00", Icon: HomeIcon },
-  { name: "Labor", color: "#adb5bd", Icon: Hammer },
-  { name: "Democracy", color: "#9d4edd", Icon: Landmark },
-  { name: "Climate", color: "#06d6a0", Icon: Cloud },
-];
-
-function causeFor(name) {
-  return CAUSES.find((c) => c.name === name) || CAUSES[0];
-}
-
-function tierFor(count) {
-  if (count >= 50) return "movement";
-  if (count >= 25) return "surging";
-  if (count >= 10) return "milestone";
-  return null;
-}
+import { CAUSES, causeFor, tierFor } from "./lib/causes";
 
 export default function Home() {
   const router = useRouter();
@@ -88,7 +62,9 @@ export default function Home() {
   const [audioPreview, setAudioPreview] = useState(null);
   const [locationLabel, setLocationLabel] = useState("");
   const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [postError, setPostError] = useState("");
 
   const [openComments, setOpenComments] = useState({});
   const [comments, setComments] = useState({});
@@ -229,7 +205,11 @@ export default function Home() {
   }
 
   function handleUseLocation() {
-    if (!navigator.geolocation) return;
+    setLocationError("");
+    if (!navigator.geolocation) {
+      setLocationError("Location isn't supported in this browser.");
+      return;
+    }
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -249,7 +229,15 @@ export default function Home() {
         }
         setLocating(false);
       },
-      () => setLocating(false)
+      (err) => {
+        setLocating(false);
+        setLocationError(
+          err.code === 1
+            ? "Location permission denied. Allow it in your browser's site settings."
+            : "Couldn't get your location. Try again."
+        );
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
     );
   }
 
@@ -260,28 +248,35 @@ export default function Home() {
       setDropPhase("falling");
       setTimeout(async () => {
         setUploading(true);
+        setPostError("");
         let media_url = null;
         let media_type = null;
         let audio_url = null;
-        try {
-          if (mediaFile) {
-            const ext = mediaFile.name.split(".").pop();
-            const path = `${session.user.id}/${Date.now()}-media.${ext}`;
-            const { error: upErr } = await supabase.storage.from("stand-media").upload(path, mediaFile);
-            if (!upErr) {
-              media_url = supabase.storage.from("stand-media").getPublicUrl(path).data.publicUrl;
-              media_type = mediaType;
-            }
+        const failures = [];
+        if (mediaFile) {
+          const ext = mediaFile.name.split(".").pop();
+          const path = `${session.user.id}/${Date.now()}-media.${ext}`;
+          const { error: upErr } = await supabase.storage.from("stand-media").upload(path, mediaFile);
+          if (upErr) {
+            failures.push("photo/video");
+          } else {
+            media_url = supabase.storage.from("stand-media").getPublicUrl(path).data.publicUrl;
+            media_type = mediaType;
           }
-          if (audioFile) {
-            const ext = audioFile.name.split(".").pop();
-            const path = `${session.user.id}/${Date.now()}-audio.${ext}`;
-            const { error: upErr } = await supabase.storage.from("stand-media").upload(path, audioFile);
-            if (!upErr) {
-              audio_url = supabase.storage.from("stand-media").getPublicUrl(path).data.publicUrl;
-            }
+        }
+        if (audioFile) {
+          const ext = audioFile.name.split(".").pop();
+          const path = `${session.user.id}/${Date.now()}-audio.${ext}`;
+          const { error: upErr } = await supabase.storage.from("stand-media").upload(path, audioFile);
+          if (upErr) {
+            failures.push("audio");
+          } else {
+            audio_url = supabase.storage.from("stand-media").getPublicUrl(path).data.publicUrl;
           }
-        } catch {}
+        }
+        if (failures.length) {
+          setPostError(`Couldn't upload ${failures.join(" or ")} — posted without it. Check Supabase storage permissions.`);
+        }
         const { data } = await supabase
           .from("stands")
           .insert({
@@ -655,6 +650,13 @@ export default function Home() {
           </button>
         </div>
 
+        {locationError && (
+          <p className="text-xs text-center mb-3" style={{ color: RED }}>{locationError}</p>
+        )}
+        {postError && (
+          <p className="text-xs text-center mb-3" style={{ color: RED }}>{postError}</p>
+        )}
+
         {(mediaPreview || audioPreview || locationLabel) && (
           <div className="flex flex-wrap gap-2 justify-center mb-4">
             {mediaPreview && (
@@ -909,14 +911,24 @@ export default function Home() {
                   </button>
                 )}
               </div>
-              <button
-                onClick={() => toggleComments(s.id)}
-                className="text-xs flex items-center gap-1"
-                style={{ color: MUTED }}
-              >
-                <MessageCircle size={13} />
-                {openComments[s.id] ? "Hide responses" : "View responses"}
-              </button>
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => toggleComments(s.id)}
+                  className="text-xs flex items-center gap-1"
+                  style={{ color: MUTED }}
+                >
+                  <MessageCircle size={13} />
+                  {openComments[s.id] ? "Hide responses" : "View responses"}
+                </button>
+                <Link
+                  href={`/stand/${s.id}`}
+                  className="text-xs font-bold flex items-center gap-1"
+                  style={{ color: GOLD }}
+                >
+                  Full story
+                  <ChevronRight size={13} />
+                </Link>
+              </div>
               {openComments[s.id] && (
                 <div className="mt-3 pt-3" style={{ borderTop: "1px solid " + BORDER }}>
                   {(comments[s.id] || []).map((c) => (
