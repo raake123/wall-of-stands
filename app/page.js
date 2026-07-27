@@ -30,6 +30,7 @@ import { CAUSES, causeFor, tierFor } from "./lib/causes";
 
 const TEXT_LIMIT = 120;
 const DETAILS_LIMIT = 2000;
+const COMMENT_LIMIT = 300;
 
 export default function Home() {
   const router = useRouter();
@@ -986,7 +987,12 @@ export default function Home() {
                       <span className="text-xs font-bold" style={{ color: GOLD }}>
                         @{commenterNames[c.user_id] || "..."}
                       </span>
-                      <p className="text-sm" style={{ color: WHITE }}>{c.text}</p>
+                      <p
+                        className="text-sm"
+                        style={{ color: WHITE, wordBreak: "break-word", overflowWrap: "anywhere" }}
+                      >
+                        {c.text}
+                      </p>
                     </div>
                   ))}
                   <div className="flex gap-2 mt-2">
@@ -995,6 +1001,7 @@ export default function Home() {
                       style={{ backgroundColor: BG, border: "1px solid " + BORDER, color: WHITE }}
                       placeholder="Add a response"
                       value={commentText[s.id] || ""}
+                      maxLength={COMMENT_LIMIT}
                       onChange={(e) =>
                         setCommentText({ ...commentText, [s.id]: e.target.value })
                       }

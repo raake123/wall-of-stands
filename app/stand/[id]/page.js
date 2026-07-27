@@ -320,7 +320,12 @@ export default function StandDetail() {
               </div>
             </div>
           ) : stand.details ? (
-            <p className="text-sm whitespace-pre-wrap" style={{ color: WHITE }}>{stand.details}</p>
+            <p
+              className="text-sm whitespace-pre-wrap"
+              style={{ color: WHITE, wordBreak: "break-word", overflowWrap: "anywhere" }}
+            >
+              {stand.details}
+            </p>
           ) : (
             <p className="text-sm" style={{ color: MUTED }}>
               {isMine ? "Add the full story so people know what happened." : "No additional story yet."}
@@ -334,7 +339,12 @@ export default function StandDetail() {
         {comments.map((c) => (
           <div key={c.id} className="mb-3">
             <span className="text-xs font-bold" style={{ color: GOLD }}>@{commenterNames[c.user_id] || "..."}</span>
-            <p className="text-sm" style={{ color: WHITE }}>{c.text}</p>
+            <p
+              className="text-sm"
+              style={{ color: WHITE, wordBreak: "break-word", overflowWrap: "anywhere" }}
+            >
+              {c.text}
+            </p>
           </div>
         ))}
         {session && (
@@ -344,6 +354,7 @@ export default function StandDetail() {
               style={{ backgroundColor: CARD, border: "1px solid " + BORDER, color: WHITE }}
               placeholder="Add a response"
               value={commentText}
+              maxLength={300}
               onChange={(e) => setCommentText(e.target.value)}
             />
             <button
