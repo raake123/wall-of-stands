@@ -1,21 +1,30 @@
 @import "tailwindcss";
 
-@keyframes dropIn {
-  0% { transform: scale(1) translateY(0); opacity: 1; }
-  45% { transform: scale(0.55) translateY(50px); opacity: 0.85; }
-  100% { transform: scale(0.08) translateY(160px); opacity: 0; }
+@keyframes formFist {
+  0% { transform: scale(1); }
+  100% { transform: scale(0.82); }
 }
-.animate-drop {
-  animation: dropIn 550ms cubic-bezier(.55,0,.85,.35) forwards;
+.animate-form-fist {
+  animation: formFist 280ms ease-in forwards;
 }
 
-@keyframes landedPulse {
-  0% { transform: scale(0.82); opacity: 0; }
-  45% { transform: scale(1.04); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
+@keyframes meteorFall {
+  0% { transform: scale(0.82) translateY(0) rotate(0deg); opacity: 1; }
+  60% { transform: scale(0.55) translateY(180px) rotate(12deg); opacity: 1; }
+  100% { transform: scale(0.1) translateY(380px) rotate(20deg); opacity: 0; }
 }
-.animate-landed {
-  animation: landedPulse 550ms cubic-bezier(.34,1.56,.64,1) both;
+.animate-meteor-fall {
+  animation: meteorFall 520ms cubic-bezier(.55,0,.85,.35) forwards;
+}
+
+@keyframes impactCrater {
+  0% { transform: scale(0.9) scaleY(0.85); opacity: 0; box-shadow: 0 0 0 0 rgba(255,214,10,0.9), 0 0 0 0 rgba(239,35,60,0.6); }
+  30% { opacity: 1; transform: scale(1.04) scaleY(1.06); box-shadow: 0 0 0 10px rgba(255,214,10,0.25), 0 0 0 22px rgba(239,35,60,0.12); }
+  60% { transform: scale(0.99) scaleY(0.99); box-shadow: 0 0 0 18px rgba(255,214,10,0), 0 0 0 34px rgba(239,35,60,0); }
+  100% { transform: scale(1) scaleY(1); opacity: 1; box-shadow: 0 0 0 0 rgba(255,214,10,0), 0 0 0 0 rgba(239,35,60,0); }
+}
+.animate-impact {
+  animation: impactCrater 650ms cubic-bezier(.34,1.56,.64,1) both;
 }
 
 @keyframes milestoneGlow {

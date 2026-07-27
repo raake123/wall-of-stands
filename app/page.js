@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   LogOut,
   User,
-  Send,
+  Target,
   MessageCircle,
   CheckCircle2,
   Leaf,
@@ -51,7 +51,7 @@ function tierFor(count) {
 export default function Home() {
   const router = useRouter();
   const { colors, theme, toggleTheme } = useTheme();
-  const { RED, GOLD, WHITE, BG, CARD, BORDER, MUTED } = colors;
+  const { RED, GOLD, WHITE, BG, CARD, CARD_ALT, BORDER, MUTED } = colors;
 
   const [mounted, setMounted] = useState(false);
   const [session, setSession] = useState(null);
@@ -69,7 +69,7 @@ export default function Home() {
   const [mySupports, setMySupports] = useState([]);
   const [text, setText] = useState("");
   const [category, setCategory] = useState(CAUSES[0].name);
-  const [dropping, setDropping] = useState(false);
+  const [dropPhase, setDropPhase] = useState("idle");
   const [filter, setFilter] = useState("All");
   const [sortMode, setSortMode] = useState("new");
   const [justLandedId, setJustLandedId] = useState(null);
@@ -186,22 +186,25 @@ export default function Home() {
   }
 
   async function handlePost() {
-    if (!text.trim() || dropping) return;
-    setDropping(true);
-    setTimeout(async () => {
-      const { data } = await supabase
-        .from("stands")
-        .insert({ text, user_id: session.user.id, category })
-        .select()
-        .maybeSingle();
-      setText("");
-      setDropping(false);
-      await loadStands();
-      if (data) {
-        setJustLandedId(data.id);
-        setTimeout(() => setJustLandedId(null), 600);
-      }
-    }, 550);
+    if (!text.trim() || dropPhase !== "idle") return;
+    setDropPhase("forming");
+    setTimeout(() => {
+      setDropPhase("falling");
+      setTimeout(async () => {
+        const { data } = await supabase
+          .from("stands")
+          .insert({ text, user_id: session.user.id, category })
+          .select()
+          .maybeSingle();
+        setText("");
+        setDropPhase("idle");
+        await loadStands();
+        if (data) {
+          setJustLandedId(data.id);
+          setTimeout(() => setJustLandedId(null), 700);
+        }
+      }, 520);
+    }, 280);
   }
 
   async function handleSupport(id, currentCount) {
@@ -415,8 +418,10 @@ export default function Home() {
     sortMode === "rising"
       ? [...filteredStands].sort((a, b) => (b.support_count || 0) - (a.support_count || 0))
       : filteredStands;
-  const composerPx = text ? 260 : 104;
-  const ringGap = text ? 9 : 0;
+  const dropping = dropPhase !== "idle";
+  const composerPx = Math.min(108 + text.length * 5, 250);
+  const ringGap = text || dropping ? 9 : 0;
+  const composerActive = Boolean(text) || dropping;
 
   return (
     <div className="min-h-screen pb-32" style={{ backgroundColor: BG }}>
@@ -463,15 +468,21 @@ export default function Home() {
         </p>
         <div className="flex justify-center mb-3">
           <div
-            className={dropping ? "animate-drop" : ""}
+            className={
+              dropPhase === "forming"
+                ? "animate-form-fist"
+                : dropPhase === "falling"
+                ? "animate-meteor-fall"
+                : ""
+            }
             style={{
               position: "relative",
               width: composerPx,
               height: composerPx,
-              transition: "width 420ms cubic-bezier(.34,1.2,.4,1), height 420ms cubic-bezier(.34,1.2,.4,1)",
+              transition: "width 320ms cubic-bezier(.34,1.2,.4,1), height 320ms cubic-bezier(.34,1.2,.4,1)",
             }}
           >
-            {text && (
+            {composerActive && (
               <div
                 className="animate-ring-spin"
                 style={{
@@ -491,21 +502,27 @@ export default function Home() {
                 width: composerPx - ringGap * 2,
                 height: composerPx - ringGap * 2,
                 borderRadius: "9999px",
-                backgroundColor: text ? "#1a1400" : CARD,
-                border: text ? "none" : "2px solid " + BORDER,
+                overflow: "hidden",
+                backgroundColor: composerActive ? "#1a1400" : CARD_ALT,
+                border: composerActive ? "none" : "2.5px solid " + RED,
+                boxShadow: composerActive ? "none" : "0 0 14px 1px " + RED + "40",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                transition: "width 420ms cubic-bezier(.34,1.2,.4,1), height 420ms cubic-bezier(.34,1.2,.4,1), background-color 300ms",
+                transition: "width 320ms cubic-bezier(.34,1.2,.4,1), height 320ms cubic-bezier(.34,1.2,.4,1), background-color 300ms",
               }}
             >
-              <textarea
-                className="bg-transparent text-center w-full h-full outline-none resize-none text-sm font-bold p-5"
-                style={{ color: text ? GOLD : WHITE }}
-                placeholder="I stand for..."
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-              />
+              {dropping ? (
+                <span style={{ fontSize: composerPx * 0.32, lineHeight: 1 }}>✊</span>
+              ) : (
+                <textarea
+                  className="bg-transparent text-center outline-none resize-none text-sm font-bold"
+                  style={{ color: text ? GOLD : WHITE, width: "72%", height: "72%", wordBreak: "break-word" }}
+                  placeholder="I stand for..."
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -534,11 +551,12 @@ export default function Home() {
 
         <button
           onClick={handlePost}
-          className="w-full p-3 rounded-full font-bold uppercase tracking-wide mb-6 flex items-center justify-center gap-2"
+          disabled={dropping}
+          className="w-full p-3 rounded-full font-bold uppercase tracking-wide mb-6 flex items-center justify-center gap-2 disabled:opacity-60"
           style={{ backgroundColor: RED, color: "#fff" }}
         >
-          <Send size={15} />
-          File this stand
+          <Target size={15} />
+          Drop This Stand
         </button>
 
         <div className="flex gap-2 mb-3">
@@ -629,7 +647,7 @@ export default function Home() {
               className={
                 "rounded-lg p-4 mb-4 " +
                 glowClass +
-                (justLandedId === s.id ? " animate-landed" : "")
+                (justLandedId === s.id ? " animate-impact" : "")
               }
               style={{ backgroundColor: CARD, borderLeft: "4px solid " + cause.color }}
             >
