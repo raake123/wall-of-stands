@@ -260,28 +260,36 @@ export default function Home() {
         let audio_url = null;
         const failures = [];
         if (mediaFile) {
-          const ext = mediaFile.name.split(".").pop();
-          const path = `${session.user.id}/${Date.now()}-media.${ext}`;
-          const { error: upErr } = await supabase.storage.from("stand-media").upload(path, mediaFile);
-          if (upErr) {
-            failures.push("photo/video");
-          } else {
-            media_url = supabase.storage.from("stand-media").getPublicUrl(path).data.publicUrl;
-            media_type = mediaType;
+          try {
+            const ext = mediaFile.name.split(".").pop();
+            const path = `${session.user.id}/${Date.now()}-media.${ext}`;
+            const { error: upErr } = await supabase.storage.from("stand-media").upload(path, mediaFile);
+            if (upErr) {
+              failures.push(`photo/video: ${upErr.message || upErr.error || JSON.stringify(upErr)}`);
+            } else {
+              media_url = supabase.storage.from("stand-media").getPublicUrl(path).data.publicUrl;
+              media_type = mediaType;
+            }
+          } catch (e) {
+            failures.push(`photo/video threw: ${e?.message || String(e)}`);
           }
         }
         if (audioFile) {
-          const ext = audioFile.name.split(".").pop();
-          const path = `${session.user.id}/${Date.now()}-audio.${ext}`;
-          const { error: upErr } = await supabase.storage.from("stand-media").upload(path, audioFile);
-          if (upErr) {
-            failures.push("audio");
-          } else {
-            audio_url = supabase.storage.from("stand-media").getPublicUrl(path).data.publicUrl;
+          try {
+            const ext = audioFile.name.split(".").pop();
+            const path = `${session.user.id}/${Date.now()}-audio.${ext}`;
+            const { error: upErr } = await supabase.storage.from("stand-media").upload(path, audioFile);
+            if (upErr) {
+              failures.push(`audio: ${upErr.message || upErr.error || JSON.stringify(upErr)}`);
+            } else {
+              audio_url = supabase.storage.from("stand-media").getPublicUrl(path).data.publicUrl;
+            }
+          } catch (e) {
+            failures.push(`audio threw: ${e?.message || String(e)}`);
           }
         }
         if (failures.length) {
-          setPostError(`Couldn't upload ${failures.join(" or ")} — posted without it. Check Supabase storage permissions.`);
+          setPostError(failures.join(" | "));
         }
         const { data } = await supabase
           .from("stands")
@@ -667,7 +675,13 @@ export default function Home() {
           <p className="text-xs text-center mb-3" style={{ color: RED }}>{locationError}</p>
         )}
         {postError && (
-          <p className="text-xs text-center mb-3" style={{ color: RED }}>{postError}</p>
+          <div
+            className="text-xs p-3 rounded mb-4"
+            style={{ border: "1.5px solid " + RED, color: RED, backgroundColor: "#2a0a0d", wordBreak: "break-word" }}
+          >
+            <p className="font-black uppercase mb-1">Upload failed</p>
+            <p>{postError}</p>
+          </div>
         )}
 
         {(mediaPreview || audioPreview || locationLabel) && (
