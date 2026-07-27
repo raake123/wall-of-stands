@@ -328,7 +328,7 @@ export default function Home() {
     }, 280);
   }
 
-  async function handleSupport(id, currentCount) {
+  async function handleSupport(id) {
     if (mySupports.includes(id)) return;
     setBurstId(id);
     setTimeout(() => setBurstId(null), 600);
@@ -336,7 +336,7 @@ export default function Home() {
       .from("supports")
       .insert({ stand_id: id, user_id: session.user.id });
     if (error) return;
-    await supabase.from("stands").update({ support_count: currentCount + 1 }).eq("id", id);
+    await supabase.rpc("increment_support", { stand_id_param: id });
     loadStands();
     loadMySupports();
   }
@@ -999,7 +999,7 @@ export default function Home() {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={() => handleSupport(s.id, s.support_count)}
+                    onClick={() => handleSupport(s.id)}
                     disabled={supported}
                     className={"w-10 h-10 rounded-full flex items-center justify-center " + (burstId === s.id ? "animate-rally" : "")}
                     style={

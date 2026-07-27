@@ -91,7 +91,7 @@ export default function StandDetail() {
       setSupported(false);
       return;
     }
-    await supabase.from("stands").update({ support_count: stand.support_count + 1 }).eq("id", stand.id);
+    await supabase.rpc("increment_support", { stand_id_param: stand.id });
     load();
   }
 

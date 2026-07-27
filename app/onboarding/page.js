@@ -57,7 +57,11 @@ export default function Onboarding() {
       causes,
     });
     if (error) {
-      setError(error.message);
+      setError(
+        error.code === "23505"
+          ? "That username is already taken — try another."
+          : error.message
+      );
       return;
     }
     router.push("/");

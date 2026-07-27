@@ -13,9 +13,9 @@ export const CAUSES = [
   { name: "Environment", color: "#2ecc71", Icon: Leaf },
   { name: "Education", color: "#4cc9f0", Icon: GraduationCap },
   { name: "Health", color: "#ff4d6d", Icon: Heart },
-  { name: "Justice", color: "#ffd60a", Icon: Scale },
+  { name: "Justice", color: "#b8860b", Icon: Scale },
   { name: "Housing", color: "#f77f00", Icon: HomeIcon },
-  { name: "Labor", color: "#adb5bd", Icon: Hammer },
+  { name: "Labor", color: "#6c757d", Icon: Hammer },
   { name: "Democracy", color: "#9d4edd", Icon: Landmark },
   { name: "Climate", color: "#06d6a0", Icon: Cloud },
 ];
