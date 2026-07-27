@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "../lib/theme-context";
 import { causeFor, tierFor } from "../lib/causes";
-import { formatLocation, locOf } from "../lib/location";
+import { formatLocation, locOf, hasLocation } from "../lib/location";
 
 export function formatWhen(ts) {
   if (!ts) return "";
@@ -207,12 +207,15 @@ export default function StandCard({
           <p className="text-sm font-bold leading-tight" style={{ color: GOLD }}>
             {s.support_count} standing with this
           </p>
-          <p className="text-[11px] leading-tight" style={{ color: MUTED }}>
-            <span style={{ color: RED, fontWeight: 700 }}>{s.support_in || 0} in</span>
-            {" · "}
-            <span style={{ fontWeight: 700 }}>{s.support_out || 0} out</span>
-            {" of the area"}
-          </p>
+          {/* Only meaningful once we know where the issue actually is. */}
+          {hasLocation(locOf(s)) && (
+            <p className="text-[11px] leading-tight" style={{ color: MUTED }}>
+              <span style={{ color: RED, fontWeight: 700 }}>{s.support_in || 0} in</span>
+              {" · "}
+              <span style={{ fontWeight: 700 }}>{s.support_out || 0} out</span>
+              {" of the area"}
+            </p>
+          )}
         </div>
       </div>
 

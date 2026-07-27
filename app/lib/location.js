@@ -11,6 +11,13 @@ function norm(v) {
     .trim();
 }
 
+// Spacing in place names is inconsistent in real addresses — people write
+// "Tamilnadu" and "Tamil Nadu", "NewDelhi" and "New Delhi". Compare with the
+// spaces collapsed so those count as the same place.
+function key(v) {
+  return norm(v).replace(/\s/g, "");
+}
+
 // Nominatim returns a big `address` object whose keys vary by place. Pick the
 // most specific sensible value for each level.
 export function parseNominatim(data) {
@@ -73,30 +80,31 @@ export function hasLocation(loc) {
 export function isInsideArea(standLoc, personLoc) {
   if (!standLoc || !personLoc) return false;
 
-  const sArea = norm(standLoc.area);
-  const pArea = norm(personLoc.area);
-  const sCity = norm(standLoc.city);
-  const pCity = norm(personLoc.city);
-  const sState = norm(standLoc.state);
-  const pState = norm(personLoc.state);
+  const sArea = key(standLoc.area);
+  const pArea = key(personLoc.area);
+  const sCity = key(standLoc.city);
+  const pCity = key(personLoc.city);
+  const sState = key(standLoc.state);
+  const pState = key(personLoc.state);
 
+  // Different states are always different places.
+  if (sState && pState && sState !== pState) return false;
+
+  // Real addresses disagree about which level a place name belongs to:
+  // "Ambattur" is a neighbourhood to one source and a city/zone to another.
+  // So we compare place names across levels rather than area-to-area only.
+  const standPlaces = [sArea, sCity].filter(Boolean);
+  const personPlaces = [pArea, pCity].filter(Boolean);
+  if (!standPlaces.length || !personPlaces.length) return false;
+
+  // When both sides name an area, that area must be what matches — otherwise
+  // two different neighbourhoods of one big city would count as the same place.
   if (sArea && pArea) {
-    if (sArea !== pArea) return false;
-    // An area name is already specific. We only reject a match when the two
-    // sides are in demonstrably different states — city names are unreliable
-    // here, since the same place is often written as its zone ("Ambattur") by
-    // one source and its metro ("Chennai") by another.
-    if (sState && pState && sState !== pState) return false;
-    return true;
+    return standPlaces.includes(pArea) || personPlaces.includes(sArea);
   }
 
-  if (sCity && pCity) {
-    if (sCity !== pCity) return false;
-    if (sState && pState && sState !== pState) return false;
-    return true;
-  }
-
-  return false;
+  // Otherwise the city is the most specific boundary either side gave us.
+  return standPlaces.some((x) => personPlaces.includes(x));
 }
 
 // Pull the location fields off a row that stores them inline.

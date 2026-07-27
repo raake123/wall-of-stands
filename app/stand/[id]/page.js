@@ -20,7 +20,7 @@ import { supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme-context";
 import { useAuth } from "../../lib/auth-context";
 import { causeFor, tierFor } from "../../lib/causes";
-import { isInsideArea, formatLocation, locOf } from "../../lib/location";
+import { isInsideArea, formatLocation, locOf, hasLocation } from "../../lib/location";
 import VoiceRecorder from "../../components/VoiceRecorder";
 
 function formatWhen(ts) {
@@ -249,8 +249,15 @@ export default function StandDetail() {
     return homeLocOf(speakers[v.user_id]) || {};
   };
 
-  const insideVoices = voices.filter((v) => isInsideArea(standLoc, voiceLoc(v)));
-  const outsideVoices = voices.filter((v) => !isInsideArea(standLoc, voiceLoc(v)));
+  // Without a location on the stand there is no "area" to be inside of, so
+  // grouping would just label everyone an outsider. Show one flat list instead.
+  const canGroupVoices = hasLocation(standLoc);
+  const insideVoices = canGroupVoices
+    ? voices.filter((v) => isInsideArea(standLoc, voiceLoc(v)))
+    : [];
+  const outsideVoices = canGroupVoices
+    ? voices.filter((v) => !isInsideArea(standLoc, voiceLoc(v)))
+    : voices;
 
   function VoiceRow({ v }) {
     const sp = speakers[v.user_id];
@@ -440,12 +447,14 @@ export default function StandDetail() {
             <p className="text-sm font-bold leading-tight" style={{ color: GOLD }}>
               {stand.support_count} standing with this
             </p>
-            <p className="text-[11px] leading-tight" style={{ color: MUTED }}>
-              <span style={{ color: RED, fontWeight: 700 }}>{stand.support_in || 0} in</span>
-              {" · "}
-              <span style={{ fontWeight: 700 }}>{stand.support_out || 0} out</span>
-              {" of the area"}
-            </p>
+            {hasLocation(standLoc) && (
+              <p className="text-[11px] leading-tight" style={{ color: MUTED }}>
+                <span style={{ color: RED, fontWeight: 700 }}>{stand.support_in || 0} in</span>
+                {" · "}
+                <span style={{ fontWeight: 700 }}>{stand.support_out || 0} out</span>
+                {" of the area"}
+              </p>
+            )}
           </div>
         </div>
 
@@ -705,13 +714,15 @@ export default function StandDetail() {
 
         {outsideVoices.length > 0 && (
           <div className="mb-5">
-            <p
-              className="text-[11px] font-black uppercase tracking-wide mb-2 flex items-center gap-1"
-              style={{ color: MUTED }}
-            >
-              <Globe size={12} />
-              People from outside the area ({outsideVoices.length})
-            </p>
+            {canGroupVoices && (
+              <p
+                className="text-[11px] font-black uppercase tracking-wide mb-2 flex items-center gap-1"
+                style={{ color: MUTED }}
+              >
+                <Globe size={12} />
+                People from outside the area ({outsideVoices.length})
+              </p>
+            )}
             {outsideVoices.map((v) => (
               <VoiceRow key={v.id} v={v} />
             ))}
