@@ -82,8 +82,11 @@ export function isInsideArea(standLoc, personLoc) {
 
   if (sArea && pArea) {
     if (sArea !== pArea) return false;
-    // Same area name in a different city is not the same place.
-    if (sCity && pCity && sCity !== pCity) return false;
+    // An area name is already specific. We only reject a match when the two
+    // sides are in demonstrably different states — city names are unreliable
+    // here, since the same place is often written as its zone ("Ambattur") by
+    // one source and its metro ("Chennai") by another.
+    if (sState && pState && sState !== pState) return false;
     return true;
   }
 
