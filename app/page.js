@@ -17,7 +17,7 @@ function OngoingWall() {
   const router = useRouter();
   const { colors } = useTheme();
   const { RED, GOLD, WHITE, BG, CARD, BORDER, MUTED } = colors;
-  const { session, profile, loading: authLoading } = useAuth();
+  const { session, profile, verified, loading: authLoading } = useAuth();
 
   const [stands, setStands] = useState([]);
   const [loadingStands, setLoadingStands] = useState(true);
@@ -68,7 +68,7 @@ function OngoingWall() {
   }
 
   async function handleSupport(id) {
-    if (!session || mySupports.includes(id)) return;
+    if (!session || !verified || mySupports.includes(id)) return;
     setBurstId(id);
     setTimeout(() => setBurstId(null), 600);
 
@@ -205,7 +205,7 @@ function OngoingWall() {
           key={s.id}
           stand={s}
           supported={mySupports.includes(s.id)}
-          onSupport={handleSupport}
+          onSupport={verified ? handleSupport : undefined}
           bursting={burstId === s.id}
           voiceCount={voiceCounts[s.id] || 0}
         />

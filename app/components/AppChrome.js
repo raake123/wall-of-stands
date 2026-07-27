@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sun, Moon, Flame, PlusCircle, CheckCircle2 } from "lucide-react";
+import { Sun, Moon, Flame, PlusCircle, CheckCircle2, ShieldCheck, ShieldAlert, Clock } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useTheme } from "../lib/theme-context";
 import { useAuth } from "../lib/auth-context";
@@ -205,12 +205,22 @@ export default function AppChrome({ children }) {
   const pathname = usePathname();
   const { colors, theme, toggleTheme } = useTheme();
   const { RED, GOLD, WHITE, BG, CARD, BORDER, MUTED } = colors;
-  const { session, profile, recoveryMode } = useAuth();
+  const { session, profile, verified, recoveryMode } = useAuth();
 
   if (recoveryMode) return <RecoveryScreen />;
   if (!session) return <AuthScreen />;
 
   const initial = profile ? profile.name.charAt(0).toUpperCase() : "";
+  const status = profile?.verification_status || "unverified";
+
+  const verifyBanner =
+    !profile || verified
+      ? null
+      : status === "pending"
+      ? { Icon: Clock, color: GOLD, text: "Your identity is being reviewed. You can read the wall meanwhile." }
+      : status === "rejected"
+      ? { Icon: ShieldAlert, color: RED, text: "Verification wasn't approved — tap to submit again." }
+      : { Icon: ShieldCheck, color: GOLD, text: "Verify your identity to file a stand, stand with one, or speak out." };
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: BG }}>
@@ -269,7 +279,19 @@ export default function AppChrome({ children }) {
         </div>
       </div>
 
-      <div className="max-w-md mx-auto px-4 py-5">{children}</div>
+      <div className="max-w-md mx-auto px-4 py-5">
+        {verifyBanner && (
+          <Link
+            href="/verify"
+            className="flex items-start gap-2 rounded-lg p-3 mb-4 text-xs"
+            style={{ border: "1px solid " + verifyBanner.color, color: verifyBanner.color, backgroundColor: CARD }}
+          >
+            <verifyBanner.Icon size={15} className="flex-shrink-0 mt-0.5" />
+            <span>{verifyBanner.text}</span>
+          </Link>
+        )}
+        {children}
+      </div>
     </div>
   );
 }

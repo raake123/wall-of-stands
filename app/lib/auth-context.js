@@ -55,9 +55,13 @@ export function AuthProvider({ children }) {
     setProfile(null);
   }
 
+  // Only a reviewed account may file a stand, stand with one, or speak out —
+  // an unverified crowd would make the support counts meaningless.
+  const verified = profile?.verification_status === "verified";
+
   return (
     <AuthContext.Provider
-      value={{ session, profile, loading, recoveryMode, setRecoveryMode, refreshProfile, logout }}
+      value={{ session, profile, verified, loading, recoveryMode, setRecoveryMode, refreshProfile, logout }}
     >
       {children}
     </AuthContext.Provider>

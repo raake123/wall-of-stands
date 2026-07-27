@@ -49,7 +49,7 @@ export default function StandDetail() {
   const router = useRouter();
   const { colors } = useTheme();
   const { RED, GOLD, GREEN, WHITE, BG, CARD, BORDER, MUTED } = colors;
-  const { session, profile } = useAuth();
+  const { session, profile, verified } = useAuth();
 
   const [stand, setStand] = useState(null);
   const [author, setAuthor] = useState(null);
@@ -130,7 +130,7 @@ export default function StandDetail() {
   }
 
   async function handleSupport() {
-    if (!session || supported || stand.resolved_at) return;
+    if (!session || !verified || supported || stand.resolved_at) return;
     setSupported(true);
     const me = homeLocOf(profile) || {};
     const inside = isInsideArea(locOf(stand), me);
@@ -186,7 +186,7 @@ export default function StandDetail() {
   }
 
   async function handlePostVoice(blob) {
-    if (!session) return;
+    if (!session || !verified) return;
     setPostingVoice(true);
     setVoiceError("");
     const ext = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
@@ -433,7 +433,7 @@ export default function StandDetail() {
         <div className="flex items-center gap-3 mb-6">
           <button
             onClick={handleSupport}
-            disabled={supported || !session || isResolved}
+            disabled={supported || !session || !verified || isResolved}
             className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 disabled:opacity-70"
             style={
               supported
