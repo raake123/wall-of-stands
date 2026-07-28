@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Mic, Square, Trash2, Send, Loader2 } from "lucide-react";
 import { useTheme } from "../lib/theme-context";
 
-const MAX_SECONDS = 60;
+import { VOICE_SECONDS as MAX_SECONDS, VOICES_PER_STAND } from "../lib/limits";
 
 function pickMimeType() {
   if (typeof MediaRecorder === "undefined") return "";
@@ -12,7 +12,7 @@ function pickMimeType() {
   return candidates.find((t) => MediaRecorder.isTypeSupported(t)) || "";
 }
 
-export default function VoiceRecorder({ onSubmit, submitting }) {
+export default function VoiceRecorder({ onSubmit, submitting, remaining = VOICES_PER_STAND }) {
   const { colors } = useTheme();
   const { RED, GOLD, WHITE, CARD, BORDER, MUTED } = colors;
 
@@ -139,6 +139,13 @@ export default function VoiceRecorder({ onSubmit, submitting }) {
           <Square size={14} />
           Stop — {mmss}
         </button>
+      ) : remaining <= 0 ? (
+        <div
+          className="w-full py-3 rounded-full text-[11px] font-bold text-center"
+          style={{ border: "1px solid " + BORDER, color: MUTED }}
+        >
+          You've used both your voices on this stand
+        </div>
       ) : (
         <button
           onClick={startRecording}
@@ -148,6 +155,11 @@ export default function VoiceRecorder({ onSubmit, submitting }) {
           <Mic size={15} />
           Speak out
         </button>
+      )}
+      {!recording && remaining > 0 && (
+        <p className="text-[11px] text-center mt-1.5" style={{ color: MUTED }}>
+          {remaining} of {VOICES_PER_STAND} left on this stand · {MAX_SECONDS} seconds each
+        </p>
       )}
       {recording && (
         <p className="text-[11px] text-center mt-1" style={{ color: MUTED }}>

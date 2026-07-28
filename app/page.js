@@ -26,10 +26,12 @@ function OngoingWall() {
   const [sortMode, setSortMode] = useState("new");
   const [burstId, setBurstId] = useState(null);
   const [voiceCounts, setVoiceCounts] = useState({});
+  const [residentCount, setResidentCount] = useState(0);
 
   useEffect(() => {
     loadStands();
     loadVoiceCounts();
+    loadResidentCount();
   }, []);
 
   useEffect(() => {
@@ -65,6 +67,15 @@ function OngoingWall() {
       counts[v.stand_id] = (counts[v.stand_id] || 0) + 1;
     });
     setVoiceCounts(counts);
+  }
+
+  // The "strong" bar scales with how many verified residents actually exist.
+  async function loadResidentCount() {
+    const { count } = await supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("verification_status", "verified");
+    setResidentCount(count || 0);
   }
 
   async function handleSupport(id) {
@@ -204,6 +215,7 @@ function OngoingWall() {
         <StandCard
           key={s.id}
           stand={s}
+          residentCount={residentCount}
           supported={mySupports.includes(s.id)}
           onSupport={verified ? handleSupport : undefined}
           bursting={burstId === s.id}

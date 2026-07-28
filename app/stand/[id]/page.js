@@ -15,6 +15,7 @@ import {
   Users,
   Globe,
   Loader2,
+  Trash2,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme-context";
@@ -22,6 +23,7 @@ import { useAuth } from "../../lib/auth-context";
 import { causeFor, tierFor } from "../../lib/causes";
 import { isInsideArea, formatLocation, locOf, hasLocation } from "../../lib/location";
 import VoiceRecorder from "../../components/VoiceRecorder";
+import { VOICES_PER_STAND, MAX_VOICES_PER_STAND, supportTarget } from "../../lib/limits";
 
 function formatWhen(ts) {
   if (!ts) return "";
@@ -66,9 +68,11 @@ export default function StandDetail() {
   const [postingVoice, setPostingVoice] = useState(false);
   const [voiceError, setVoiceError] = useState("");
   const [notFound, setNotFound] = useState(false);
-  const [mediaFailed, setMediaFailed] = useState(false);
   const [draftProgress, setDraftProgress] = useState(0);
   const [savingProgress, setSavingProgress] = useState(false);
+  const [residentCount, setResidentCount] = useState(0);
+  const [deletingVoice, setDeletingVoice] = useState(null);
+  const [confirmVoice, setConfirmVoice] = useState(null);
 
   useEffect(() => {
     load();
@@ -121,6 +125,12 @@ export default function StandDetail() {
       setSpeakers(map);
     }
 
+    const { count } = await supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("verification_status", "verified");
+    setResidentCount(count || 0);
+
     const { data: ups } = await supabase
       .from("stand_updates")
       .select("*")
@@ -165,6 +175,17 @@ export default function StandDetail() {
     }
   }
 
+  async function handleDeleteVoice(v) {
+    setDeletingVoice(v.id);
+    // Drop the file too, otherwise the storage stays used up.
+    const path = (v.audio_url || "").split("/stand-media/")[1];
+    if (path) await supabase.storage.from("stand-media").remove([path]);
+    await supabase.from("voices").delete().eq("id", v.id);
+    setDeletingVoice(null);
+    setConfirmVoice(null);
+    load();
+  }
+
   async function handleSaveDetails() {
     setSavingDetails(true);
     await supabase.from("stands").update({ details }).eq("id", stand.id);
@@ -186,7 +207,7 @@ export default function StandDetail() {
   }
 
   async function handlePostVoice(blob) {
-    if (!session || !verified) return;
+    if (!session || !verified || myVoiceCount >= VOICES_PER_STAND) return;
     setPostingVoice(true);
     setVoiceError("");
     const ext = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
@@ -242,6 +263,14 @@ export default function StandDetail() {
   const standLoc = locOf(stand);
   const standLocText = formatLocation(standLoc) || stand.location_label || "";
   const isResolved = Boolean(stand.resolved_at);
+  const photoList =
+    stand.photo_urls?.length > 0
+      ? stand.photo_urls
+      : stand.media_type === "photo" && stand.media_url
+      ? [stand.media_url]
+      : [];
+  const videoUrl =
+    stand.video_url || (stand.media_type === "video" ? stand.media_url : null);
 
   const voiceLoc = (v) => {
     const own = locOf(v);
@@ -251,6 +280,14 @@ export default function StandDetail() {
 
   // Without a location on the stand there is no "area" to be inside of, so
   // grouping would just label everyone an outsider. Show one flat list instead.
+  const myVoiceCount = session
+    ? voices.filter((v) => v.user_id === session.user.id).length
+    : 0;
+  const target = supportTarget(residentCount);
+  const reached = (stand.support_count || 0) >= target;
+  const targetPct = Math.min(100, Math.round(((stand.support_count || 0) / target) * 100));
+  const voicesFull = voices.length >= MAX_VOICES_PER_STAND;
+
   const canGroupVoices = hasLocation(standLoc);
   const insideVoices = canGroupVoices
     ? voices.filter((v) => isInsideArea(standLoc, voiceLoc(v)))
@@ -273,9 +310,41 @@ export default function StandDetail() {
             {(sp?.name || "?").charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-black truncate" style={{ color: WHITE }}>
-              {sp?.name || "Someone"}
-            </p>
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-xs font-black truncate" style={{ color: WHITE }}>
+                {sp?.name || "Someone"}
+              </p>
+              {session && v.user_id === session.user.id && (
+                confirmVoice === v.id ? (
+                  <span className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => setConfirmVoice(null)}
+                      className="text-[10px] font-bold"
+                      style={{ color: MUTED }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleDeleteVoice(v)}
+                      disabled={deletingVoice === v.id}
+                      className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: RED, color: "#fff" }}
+                    >
+                      {deletingVoice === v.id ? "..." : "Delete"}
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setConfirmVoice(v.id)}
+                    aria-label="Delete my voice"
+                    className="flex-shrink-0"
+                    style={{ color: MUTED }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )
+              )}
+            </div>
             <p className="text-[10px] flex items-center gap-1" style={{ color: MUTED }}>
               <Clock size={9} className="flex-shrink-0" />
               {formatWhen(v.created_at)}
@@ -395,29 +464,31 @@ export default function StandDetail() {
           )}
         </div>
 
-        {stand.media_url && !mediaFailed && (
-          <div className="mb-4 rounded-lg overflow-hidden">
-            {stand.media_type === "video" ? (
-              <video
-                src={stand.media_url}
-                controls
-                className="w-full max-h-[420px] object-cover"
-                onError={() => setMediaFailed(true)}
-              />
-            ) : (
+        {photoList.length > 0 && (
+          <div className={"mb-4 grid gap-2 " + (photoList.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+            {photoList.map((url, i) => (
               <img
-                src={stand.media_url}
+                key={i}
+                src={url}
                 alt=""
-                className="w-full max-h-[420px] object-cover"
-                onError={() => setMediaFailed(true)}
+                className="w-full rounded-lg object-cover"
+                style={{ maxHeight: photoList.length === 1 ? 420 : 180 }}
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
               />
-            )}
+            ))}
           </div>
         )}
-        {stand.media_url && mediaFailed && (
-          <p className="text-xs mb-4" style={{ color: MUTED }}>
-            Attached media couldn't be loaded.
-          </p>
+        {videoUrl && (
+          <video
+            src={videoUrl}
+            controls
+            className="w-full rounded-lg mb-4 max-h-[420px] object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
         )}
         {stand.audio_url && <audio src={stand.audio_url} controls className="w-full mb-4" />}
 
@@ -457,6 +528,26 @@ export default function StandDetail() {
             )}
           </div>
         </div>
+
+        {/* How close this stand is to being strong enough to carry weight */}
+        {!isResolved && (
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-black uppercase tracking-wide" style={{ color: MUTED }}>
+                {reached ? "Strong stand" : `Needs ${target - (stand.support_count || 0)} more to be strong`}
+              </span>
+              <span className="text-[10px] font-black" style={{ color: reached ? GREEN : GOLD }}>
+                {stand.support_count || 0}/{target}
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: BORDER }}>
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: targetPct + "%", backgroundColor: reached ? GREEN : GOLD }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Owner-rated progress */}
         <div className="rounded-lg p-4 mb-6" style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}>
@@ -688,7 +779,20 @@ export default function StandDetail() {
 
         {session ? (
           <div className="mb-5">
-            <VoiceRecorder onSubmit={handlePostVoice} submitting={postingVoice} />
+            {voicesFull ? (
+              <div
+                className="w-full py-3 rounded-full text-[11px] font-bold text-center"
+                style={{ border: "1px solid " + BORDER, color: MUTED }}
+              >
+                Voices closed — {MAX_VOICES_PER_STAND} residents have spoken
+              </div>
+            ) : (
+              <VoiceRecorder
+                onSubmit={handlePostVoice}
+                submitting={postingVoice}
+                remaining={VOICES_PER_STAND - myVoiceCount}
+              />
+            )}
             {voiceError && (
               <p className="text-xs text-center mt-2" style={{ color: RED }}>{voiceError}</p>
             )}

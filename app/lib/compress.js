@@ -8,8 +8,6 @@ const QUALITY = 0.82;
 // Below this an image isn't worth re-encoding.
 const SKIP_UNDER_BYTES = 300 * 1024;
 
-// Videos are the real storage killer — a short clip can be 30MB+.
-export const MAX_VIDEO_BYTES = 15 * 1024 * 1024;
 
 function loadImage(file) {
   return new Promise((resolve, reject) => {

@@ -9,11 +9,13 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  Trash2,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme-context";
 import { useAuth } from "../../lib/auth-context";
 import { addressMatchScore, matchVerdict } from "../../lib/address-match";
+import { ABANDON_DAYS } from "../../lib/limits";
 
 export default function AdminVerifyPage() {
   const { colors } = useTheme();
@@ -25,6 +27,8 @@ export default function AdminVerifyPage() {
   const [busy, setBusy] = useState(null);
   const [reasons, setReasons] = useState({});
   const [loadingRows, setLoadingRows] = useState(true);
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanMsg, setCleanMsg] = useState("");
 
   useEffect(() => {
     if (profile?.is_admin) load();
@@ -52,6 +56,38 @@ export default function AdminVerifyPage() {
     }
     setUrls(map);
     setLoadingRows(false);
+  }
+
+  // Stands nobody joined and nobody spoke on are dead weight on the storage
+  // quota. Files have to go through the Storage API, so the database only
+  // reports what to clear and we do the deleting here.
+  async function cleanupAbandoned() {
+    setCleaning(true);
+    setCleanMsg("");
+    const { data, error } = await supabase.rpc("abandoned_stands");
+    if (error) {
+      setCleanMsg(error.message);
+      setCleaning(false);
+      return;
+    }
+    const dead = data || [];
+    if (!dead.length) {
+      setCleanMsg("Nothing to clean — no abandoned stands.");
+      setCleaning(false);
+      return;
+    }
+    const paths = dead.flatMap((r) => r.paths || []);
+    if (paths.length) await supabase.storage.from("stand-media").remove(paths);
+    const { error: delErr } = await supabase
+      .from("stands")
+      .delete()
+      .in("id", dead.map((r) => r.id));
+    setCleanMsg(
+      delErr
+        ? delErr.message
+        : `Cleared ${dead.length} abandoned stand${dead.length === 1 ? "" : "s"} and ${paths.length} file${paths.length === 1 ? "" : "s"}.`
+    );
+    setCleaning(false);
   }
 
   async function decide(row, approve) {
@@ -111,6 +147,29 @@ export default function AdminVerifyPage() {
           document. The address score is a hint, not a decision — people often live
           away from their registered address.
         </p>
+
+        <div className="rounded-lg p-3 mb-5" style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}>
+          <p className="text-[10px] font-black uppercase tracking-wide mb-1" style={{ color: MUTED }}>
+            Storage cleanup
+          </p>
+          <p className="text-[11px] mb-2" style={{ color: MUTED }}>
+            Removes stands with 2 or fewer supporters, no voices and no progress
+            after {ABANDON_DAYS} days, and frees their files. Resolved stands and
+            anything with traction are never touched.
+          </p>
+          <button
+            onClick={cleanupAbandoned}
+            disabled={cleaning}
+            className="w-full py-2 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1 disabled:opacity-50"
+            style={{ border: "1.5px solid " + RED, color: RED }}
+          >
+            {cleaning ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+            Clear abandoned stands
+          </button>
+          {cleanMsg && (
+            <p className="text-[11px] mt-2" style={{ color: GOLD }}>{cleanMsg}</p>
+          )}
+        </div>
 
         {loadingRows && (
           <p className="text-sm flex items-center gap-2" style={{ color: MUTED }}>

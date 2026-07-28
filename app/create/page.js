@@ -7,7 +7,6 @@ import {
   Sparkles,
   Image as ImageIcon,
   Video,
-  Music,
   MapPin,
   X,
   Loader2,
@@ -18,12 +17,16 @@ import { useTheme } from "../lib/theme-context";
 import { useAuth } from "../lib/auth-context";
 import { CAUSES } from "../lib/causes";
 import { detectLocation, formatLocation, emptyLocation } from "../lib/location";
-import { compressImage, formatBytes, MAX_VIDEO_BYTES } from "../lib/compress";
+import { compressImage, formatBytes } from "../lib/compress";
+import {
+  MAX_PHOTOS,
+  MAX_VIDEO_BYTES,
+  MAX_VIDEO_SECONDS,
+  TEXT_LIMIT,
+  TAGLINE_LIMIT,
+  DETAILS_LIMIT,
+} from "../lib/limits";
 import AppChrome from "../components/AppChrome";
-
-const TEXT_LIMIT = 120;
-const DETAILS_LIMIT = 2000;
-const TAGLINE_LIMIT = 80;
 
 function Composer() {
   const router = useRouter();
@@ -35,11 +38,8 @@ function Composer() {
   const [category, setCategory] = useState(CAUSES[0].name);
   const [dropPhase, setDropPhase] = useState("idle");
 
-  const [mediaFile, setMediaFile] = useState(null);
-  const [mediaType, setMediaType] = useState(null);
-  const [mediaPreview, setMediaPreview] = useState(null);
-  const [audioFile, setAudioFile] = useState(null);
-  const [audioPreview, setAudioPreview] = useState(null);
+  const [photos, setPhotos] = useState([]); // [{ file, preview }]
+  const [video, setVideo] = useState(null); // { file, preview }
 
   const [location, setLocation] = useState(emptyLocation());
   const [locating, setLocating] = useState(false);
@@ -54,51 +54,49 @@ function Composer() {
 
   const locationText = formatLocation(location);
 
-  async function handleMediaSelect(e) {
+  async function handlePhotoSelect(e) {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!picked.length) return;
+    setPostError("");
+
+    const room = MAX_PHOTOS - photos.length;
+    if (room <= 0) {
+      setPostError(`You can attach ${MAX_PHOTOS} photos to a stand.`);
+      return;
+    }
+    if (picked.length > room) {
+      setPostError(`Only ${room} more photo${room === 1 ? "" : "s"} can be added — the rest were skipped.`);
+    }
+
+    const added = [];
+    for (const f of picked.slice(0, room)) {
+      const shrunk = await compressImage(f);
+      added.push({ file: shrunk, preview: URL.createObjectURL(shrunk) });
+    }
+    setPhotos((prev) => [...prev, ...added]);
+  }
+
+  function removePhoto(i) {
+    setPhotos((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  function handleVideoSelect(e) {
     const file = e.target.files[0];
     e.target.value = "";
     if (!file) return;
     setPostError("");
-
-    if (file.type.startsWith("video")) {
-      // A single long clip can eat a large share of the storage quota.
-      if (file.size > MAX_VIDEO_BYTES) {
-        setPostError(
-          `That video is ${formatBytes(file.size)} — please keep videos under ${formatBytes(
-            MAX_VIDEO_BYTES
-          )} (about 15 seconds), or attach a photo instead.`
-        );
-        return;
-      }
-      setMediaFile(file);
-      setMediaType("video");
-      setMediaPreview(URL.createObjectURL(file));
+    if (file.size > MAX_VIDEO_BYTES) {
+      setPostError(
+        `That video is ${formatBytes(file.size)} — keep it under ${formatBytes(MAX_VIDEO_BYTES)} (about ${MAX_VIDEO_SECONDS} seconds).`
+      );
       return;
     }
-
-    const shrunk = await compressImage(file);
-    setMediaFile(shrunk);
-    setMediaType("photo");
-    setMediaPreview(URL.createObjectURL(shrunk));
+    setVideo({ file, preview: URL.createObjectURL(file) });
   }
 
-  function clearMedia() {
-    setMediaFile(null);
-    setMediaType(null);
-    setMediaPreview(null);
-  }
-
-  function handleAudioSelect(e) {
-    const file = e.target.files[0];
-    e.target.value = "";
-    if (!file) return;
-    setAudioFile(file);
-    setAudioPreview(URL.createObjectURL(file));
-  }
-
-  function clearAudio() {
-    setAudioFile(null);
-    setAudioPreview(null);
+  function clearVideo() {
+    setVideo(null);
   }
 
   async function handleUseLocation() {
@@ -120,36 +118,27 @@ function Composer() {
       setTimeout(async () => {
         setUploading(true);
         setPostError("");
-        let media_url = null;
-        let media_type = null;
-        let audio_url = null;
+        const photo_urls = [];
+        let video_url = null;
         const failures = [];
 
-        if (mediaFile) {
-          try {
-            const ext = mediaFile.name.split(".").pop();
-            const path = `${session.user.id}/${Date.now()}-media.${ext}`;
-            const { error: upErr } = await supabase.storage.from("stand-media").upload(path, mediaFile);
-            if (upErr) failures.push(`photo/video: ${upErr.message || JSON.stringify(upErr)}`);
-            else {
-              media_url = supabase.storage.from("stand-media").getPublicUrl(path).data.publicUrl;
-              media_type = mediaType;
-            }
-          } catch (e) {
-            failures.push(`photo/video threw: ${e?.message || String(e)}`);
+        async function put(file, tag) {
+          const ext = (file.name || "bin").split(".").pop();
+          const path = `${session.user.id}/${Date.now()}-${tag}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+          const { error } = await supabase.storage.from("stand-media").upload(path, file);
+          if (error) {
+            failures.push(`${tag}: ${error.message || JSON.stringify(error)}`);
+            return null;
           }
+          return supabase.storage.from("stand-media").getPublicUrl(path).data.publicUrl;
         }
-        if (audioFile) {
-          try {
-            const ext = audioFile.name.split(".").pop();
-            const path = `${session.user.id}/${Date.now()}-audio.${ext}`;
-            const { error: upErr } = await supabase.storage.from("stand-media").upload(path, audioFile);
-            if (upErr) failures.push(`audio: ${upErr.message || JSON.stringify(upErr)}`);
-            else audio_url = supabase.storage.from("stand-media").getPublicUrl(path).data.publicUrl;
-          } catch (e) {
-            failures.push(`audio threw: ${e?.message || String(e)}`);
-          }
+
+        for (const p of photos) {
+          const url = await put(p.file, "photo");
+          if (url) photo_urls.push(url);
         }
+        if (video) video_url = await put(video.file, "video");
+
         if (failures.length) setPostError(failures.join(" | "));
 
         // Fall back to the person's home area when they didn't tag a location.
@@ -168,9 +157,10 @@ function Composer() {
             text,
             user_id: session.user.id,
             category,
-            media_url,
-            media_type,
-            audio_url,
+            photo_urls,
+            video_url,
+            media_url: photo_urls[0] || video_url || null,
+            media_type: photo_urls.length ? "photo" : video_url ? "video" : null,
             area: loc.area || null,
             city: loc.city || null,
             state: loc.state || null,
@@ -278,22 +268,35 @@ function Composer() {
         {text.length}/{TEXT_LIMIT} — keep it short, add the full story below
       </p>
 
-      <div className="flex justify-center gap-2 mb-4">
+      <div className="flex justify-center gap-2 mb-2">
         <label
           className="flex-1 py-2.5 rounded-full flex items-center justify-center gap-1.5 cursor-pointer text-[11px] font-black uppercase tracking-wide"
-          style={attachBtn(Boolean(mediaFile))}
+          style={attachBtn(photos.length > 0)}
         >
-          {mediaType === "video" ? <Video size={15} /> : <ImageIcon size={15} />}
-          Photo
-          <input type="file" accept="image/*,video/*" className="hidden" onChange={handleMediaSelect} />
+          <ImageIcon size={15} />
+          Photos {photos.length}/{MAX_PHOTOS}
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handlePhotoSelect}
+            disabled={photos.length >= MAX_PHOTOS}
+          />
         </label>
         <label
           className="flex-1 py-2.5 rounded-full flex items-center justify-center gap-1.5 cursor-pointer text-[11px] font-black uppercase tracking-wide"
-          style={attachBtn(Boolean(audioFile))}
+          style={attachBtn(Boolean(video))}
         >
-          <Music size={15} />
-          Music
-          <input type="file" accept="audio/*" className="hidden" onChange={handleAudioSelect} />
+          <Video size={15} />
+          Video {video ? "1/1" : `0/1`}
+          <input
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={handleVideoSelect}
+            disabled={Boolean(video)}
+          />
         </label>
         <button
           onClick={handleUseLocation}
@@ -305,6 +308,53 @@ function Composer() {
           Place
         </button>
       </div>
+
+      {/* Spell the caps out — people can only use their allowance well if they know it. */}
+      <p className="text-[10px] text-center mb-4" style={{ color: MUTED }}>
+        Up to {MAX_PHOTOS} photos · 1 video (max {MAX_VIDEO_SECONDS}s) · everyone gets 2 voice
+        notes of {MAX_VIDEO_SECONDS}s on each stand
+      </p>
+
+      {photos.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {photos.map((p, i) => (
+            <div key={i} className="relative">
+              <img
+                src={p.preview}
+                alt=""
+                className="w-16 h-16 rounded-lg object-cover"
+                style={{ border: "1px solid " + BORDER }}
+              />
+              <button
+                onClick={() => removePhoto(i)}
+                aria-label="Remove photo"
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: RED, color: "#fff" }}
+              >
+                <X size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {video && (
+        <div className="relative mb-3 inline-block">
+          <video
+            src={video.preview}
+            className="w-28 h-20 rounded-lg object-cover"
+            style={{ border: "1px solid " + BORDER }}
+          />
+          <button
+            onClick={clearVideo}
+            aria-label="Remove video"
+            className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: RED, color: "#fff" }}
+          >
+            <X size={11} />
+          </button>
+        </div>
+      )}
 
       {locationError && (
         <p className="text-xs text-center mb-3" style={{ color: RED }}>{locationError}</p>
@@ -319,48 +369,18 @@ function Composer() {
         </div>
       )}
 
-      {(mediaPreview || audioPreview || locationText) && (
+      {locationText && (
         <div className="flex flex-wrap gap-2 justify-center mb-4">
-          {mediaPreview && (
-            <div
-              className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-full text-xs"
-              style={{ border: "1px solid " + BORDER, color: MUTED }}
-            >
-              {mediaType === "video" ? (
-                <video src={mediaPreview} className="w-6 h-6 rounded-full object-cover" />
-              ) : (
-                <img src={mediaPreview} className="w-6 h-6 rounded-full object-cover" alt="" />
-              )}
-              {mediaType === "video" ? "Video attached" : "Photo attached"}
-              <button onClick={clearMedia} style={{ color: RED }} aria-label="Remove">
-                <X size={13} />
-              </button>
-            </div>
-          )}
-          {audioPreview && (
-            <div
-              className="flex items-center gap-2 pl-3 pr-1 py-1 rounded-full text-xs"
-              style={{ border: "1px solid " + BORDER, color: MUTED }}
-            >
-              <Music size={12} />
-              Audio attached
-              <button onClick={clearAudio} style={{ color: RED }} aria-label="Remove">
-                <X size={13} />
-              </button>
-            </div>
-          )}
-          {locationText && (
-            <div
-              className="flex items-center gap-2 pl-3 pr-1 py-1 rounded-full text-xs"
-              style={{ border: "1px solid " + BORDER, color: MUTED, wordBreak: "break-word" }}
-            >
-              <MapPin size={12} className="flex-shrink-0" />
-              {locationText}
-              <button onClick={() => setLocation(emptyLocation())} style={{ color: RED }} aria-label="Remove">
-                <X size={13} />
-              </button>
-            </div>
-          )}
+          <div
+            className="flex items-center gap-2 pl-3 pr-1 py-1 rounded-full text-xs"
+            style={{ border: "1px solid " + BORDER, color: MUTED, wordBreak: "break-word" }}
+          >
+            <MapPin size={12} className="flex-shrink-0" />
+            {locationText}
+            <button onClick={() => setLocation(emptyLocation())} style={{ color: RED }} aria-label="Remove">
+              <X size={13} />
+            </button>
+          </div>
         </div>
       )}
 

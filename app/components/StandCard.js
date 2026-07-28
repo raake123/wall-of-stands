@@ -14,6 +14,7 @@ import {
 import { useTheme } from "../lib/theme-context";
 import { causeFor, tierFor } from "../lib/causes";
 import { formatLocation, locOf, hasLocation } from "../lib/location";
+import { supportTarget } from "../lib/limits";
 
 export function formatWhen(ts) {
   if (!ts) return "";
@@ -28,6 +29,7 @@ export function formatWhen(ts) {
 
 export default function StandCard({
   stand: s,
+  residentCount = 0,
   supported,
   onSupport,
   bursting,
@@ -44,6 +46,12 @@ export default function StandCard({
   const progress = s.progress || 0;
   const isResolved = Boolean(s.resolved_at);
   const locationText = formatLocation(locOf(s)) || s.location_label || "";
+  const thumb =
+    s.photo_urls?.[0] || (s.media_type === "photo" ? s.media_url : null);
+  const thumbVideo = s.video_url || (s.media_type === "video" ? s.media_url : null);
+  const extraPhotos = Math.max(0, (s.photo_urls?.length || 0) - 1);
+  const target = supportTarget(residentCount);
+  const targetPct = Math.min(100, Math.round(((s.support_count || 0) / target) * 100));
 
   const glowClass = isResolved
     ? ""
@@ -119,22 +127,30 @@ export default function StandCard({
             </p>
           )}
         </div>
-        {s.media_url && (
+        {(thumb || thumbVideo) && (
           <Link
             href={`/stand/${s.id}`}
-            className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0"
+            className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 relative"
           >
-            {s.media_type === "video" ? (
-              <video src={s.media_url} className="w-full h-full object-cover" />
-            ) : (
+            {thumb ? (
               <img
-                src={s.media_url}
+                src={thumb}
                 alt=""
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   e.currentTarget.style.display = "none";
                 }}
               />
+            ) : (
+              <video src={thumbVideo} className="w-full h-full object-cover" />
+            )}
+            {extraPhotos > 0 && (
+              <span
+                className="absolute bottom-0 right-0 text-[9px] font-black px-1 rounded-tl"
+                style={{ backgroundColor: "rgba(0,0,0,.65)", color: "#fff" }}
+              >
+                +{extraPhotos}
+              </span>
             )}
           </Link>
         )}
@@ -218,6 +234,33 @@ export default function StandCard({
           )}
         </div>
       </div>
+
+      {!isResolved && (
+        <div className="mb-2">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-black uppercase tracking-wide" style={{ color: MUTED }}>
+              {(s.support_count || 0) >= target
+                ? "Strong stand"
+                : `${target - (s.support_count || 0)} more to be strong`}
+            </span>
+            <span
+              className="text-[10px] font-black"
+              style={{ color: (s.support_count || 0) >= target ? GREEN : GOLD }}
+            >
+              {s.support_count || 0}/{target}
+            </span>
+          </div>
+          <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: BORDER }}>
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: targetPct + "%",
+                backgroundColor: (s.support_count || 0) >= target ? GREEN : GOLD,
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <Link
