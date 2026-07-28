@@ -14,8 +14,18 @@ import {
 import { supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme-context";
 import { useAuth } from "../../lib/auth-context";
-import { addressMatchScore, matchVerdict } from "../../lib/address-match";
 import { ABANDON_DAYS } from "../../lib/limits";
+
+function formatWhen(ts) {
+  if (!ts) return "";
+  return new Date(ts).toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 export default function AdminVerifyPage() {
   const { colors } = useTheme();
@@ -23,7 +33,6 @@ export default function AdminVerifyPage() {
   const { profile, loading } = useAuth();
 
   const [rows, setRows] = useState([]);
-  const [urls, setUrls] = useState({});
   const [busy, setBusy] = useState(null);
   const [reasons, setReasons] = useState({});
   const [loadingRows, setLoadingRows] = useState(true);
@@ -42,19 +51,6 @@ export default function AdminVerifyPage() {
       .eq("verification_status", "pending")
       .order("submitted_at", { ascending: true });
     setRows(data || []);
-
-    // Private bucket — the images are only reachable through short-lived links.
-    const map = {};
-    for (const r of data || []) {
-      for (const [k, path] of [["doc", r.id_doc_path], ["selfie", r.selfie_path]]) {
-        if (!path) continue;
-        const { data: signed } = await supabase.storage
-          .from("identity-docs")
-          .createSignedUrl(path, 3600);
-        if (signed?.signedUrl) map[`${r.id}-${k}`] = signed.signedUrl;
-      }
-    }
-    setUrls(map);
     setLoadingRows(false);
   }
 
@@ -92,22 +88,22 @@ export default function AdminVerifyPage() {
 
   async function decide(row, approve) {
     setBusy(row.id);
-    const { score } = addressMatchScore(row.id_address, row.home_location);
-    const patch = approve
-      ? {
-          verification_status: "verified",
-          address_match_score: score,
-          reviewed_at: new Date().toISOString(),
-          reject_reason: null,
-          name: row.id_name || row.name,
-        }
-      : {
-          verification_status: "rejected",
-          address_match_score: score,
-          reviewed_at: new Date().toISOString(),
-          reject_reason: reasons[row.id]?.trim() || "Documents could not be verified.",
-        };
-    await supabase.from("profiles").update(patch).eq("id", row.id);
+    await supabase
+      .from("profiles")
+      .update(
+        approve
+          ? {
+              verification_status: "verified",
+              reviewed_at: new Date().toISOString(),
+              reject_reason: null,
+            }
+          : {
+              verification_status: "rejected",
+              reviewed_at: new Date().toISOString(),
+              reject_reason: reasons[row.id]?.trim() || "Request not approved.",
+            }
+      )
+      .eq("id", row.id);
     setBusy(null);
     load();
   }
@@ -140,12 +136,11 @@ export default function AdminVerifyPage() {
 
         <h1 className="text-xl font-black uppercase tracking-tight mb-1 flex items-center gap-2" style={{ color: WHITE }}>
           <ShieldCheck size={20} style={{ color: GOLD }} />
-          Verification queue
+          Join requests
         </h1>
         <p className="text-xs mb-5" style={{ color: MUTED }}>
-          Check the selfie against the ID photo, and the typed details against the
-          document. The address score is a hint, not a decision — people often live
-          away from their registered address.
+          Approve people you can place as real residents of the area. No documents
+          are collected — this is your judgement, so approve who you know.
         </p>
 
         <div className="rounded-lg p-3 mb-5" style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}>
@@ -166,117 +161,89 @@ export default function AdminVerifyPage() {
             {cleaning ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
             Clear abandoned stands
           </button>
-          {cleanMsg && (
-            <p className="text-[11px] mt-2" style={{ color: GOLD }}>{cleanMsg}</p>
-          )}
+          {cleanMsg && <p className="text-[11px] mt-2" style={{ color: GOLD }}>{cleanMsg}</p>}
         </div>
 
         {loadingRows && (
           <p className="text-sm flex items-center gap-2" style={{ color: MUTED }}>
-            <Loader2 size={14} className="animate-spin" /> Loading queue...
+            <Loader2 size={14} className="animate-spin" /> Loading requests...
           </p>
         )}
 
         {!loadingRows && rows.length === 0 && (
           <div className="text-center py-14">
             <Clock size={30} color={BORDER} className="mx-auto mb-3" />
-            <p className="text-sm" style={{ color: MUTED }}>Nothing waiting for review.</p>
+            <p className="text-sm" style={{ color: MUTED }}>No one waiting to join.</p>
           </div>
         )}
 
-        {rows.map((r) => {
-          const { score, reasons: why } = addressMatchScore(r.id_address, r.home_location);
-          const verdict = matchVerdict(score);
-          const tone = verdict.tone === "good" ? GREEN : verdict.tone === "warn" ? GOLD : RED;
-          return (
-            <div
-              key={r.id}
-              className="rounded-lg p-4 mb-5"
-              style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}
-            >
-              <p className="font-black" style={{ color: WHITE }}>{r.name}</p>
-              <p className="text-xs mb-3" style={{ color: MUTED }}>@{r.username}</p>
-
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                {[["doc", "ID document"], ["selfie", "Selfie"]].map(([k, label]) => (
-                  <div key={k}>
-                    <p className="text-[10px] font-black uppercase mb-1" style={{ color: MUTED }}>{label}</p>
-                    {urls[`${r.id}-${k}`] ? (
-                      <a href={urls[`${r.id}-${k}`]} target="_blank" rel="noreferrer">
-                        <img
-                          src={urls[`${r.id}-${k}`]}
-                          alt={label}
-                          className="w-full rounded"
-                          style={{ height: 110, objectFit: "cover", border: "1px solid " + BORDER }}
-                        />
-                      </a>
-                    ) : (
-                      <div
-                        className="w-full rounded flex items-center justify-center text-[10px]"
-                        style={{ height: 110, border: "1px dashed " + BORDER, color: MUTED }}
-                      >
-                        missing
-                      </div>
-                    )}
-                  </div>
-                ))}
+        {rows.map((r) => (
+          <div
+            key={r.id}
+            className="rounded-lg p-4 mb-4"
+            style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className="w-11 h-11 rounded-full flex items-center justify-center text-lg font-black flex-shrink-0"
+                style={{ backgroundColor: GOLD, color: "#1a1400" }}
+              >
+                {(r.name || "?").charAt(0).toUpperCase()}
               </div>
-
-              <p className="text-[10px] font-black uppercase" style={{ color: MUTED }}>Name on ID</p>
-              <p className="text-sm mb-2" style={{ color: WHITE, wordBreak: "break-word" }}>{r.id_name || "—"}</p>
-
-              <p className="text-[10px] font-black uppercase" style={{ color: MUTED }}>Address on ID</p>
-              <p className="text-sm mb-2" style={{ color: WHITE, wordBreak: "break-word" }}>{r.id_address || "—"}</p>
-
-              <p className="text-[10px] font-black uppercase" style={{ color: MUTED }}>Location at submission</p>
-              <p className="text-sm mb-3 flex items-start gap-1" style={{ color: WHITE, wordBreak: "break-word" }}>
-                <MapPin size={13} className="flex-shrink-0 mt-0.5" style={{ color: GOLD }} />
-                {r.home_location || "—"}
-              </p>
-
-              <div className="rounded p-3 mb-3" style={{ border: "1px solid " + tone }}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-black uppercase" style={{ color: MUTED }}>
-                    Address similarity
-                  </span>
-                  <span className="text-sm font-black" style={{ color: tone }}>
-                    {score}% · {verdict.label}
-                  </span>
-                </div>
-                <p className="text-[11px]" style={{ color: MUTED }}>{why.join(" · ")}</p>
-              </div>
-
-              <input
-                className="w-full p-2.5 rounded mb-2 text-xs"
-                style={{ backgroundColor: BG, border: "1px solid " + BORDER, color: WHITE }}
-                placeholder="Reason (only needed when rejecting)"
-                value={reasons[r.id] || ""}
-                maxLength={200}
-                onChange={(e) => setReasons({ ...reasons, [r.id]: e.target.value })}
-              />
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => decide(r, false)}
-                  disabled={busy === r.id}
-                  className="flex-1 py-2 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1 disabled:opacity-50"
-                  style={{ border: "1.5px solid " + RED, color: RED }}
-                >
-                  <XCircle size={13} /> Reject
-                </button>
-                <button
-                  onClick={() => decide(r, true)}
-                  disabled={busy === r.id}
-                  className="flex-1 py-2 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1 disabled:opacity-50"
-                  style={{ backgroundColor: GREEN, color: "#04240f" }}
-                >
-                  {busy === r.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-                  Approve
-                </button>
+              <div className="min-w-0">
+                <p className="font-black truncate" style={{ color: WHITE }}>{r.name}</p>
+                <p className="text-xs truncate" style={{ color: MUTED }}>@{r.username}</p>
               </div>
             </div>
-          );
-        })}
+
+            <p className="text-sm flex items-start gap-1.5 mb-2" style={{ color: WHITE, wordBreak: "break-word" }}>
+              <MapPin size={14} className="flex-shrink-0 mt-0.5" style={{ color: GOLD }} />
+              {r.home_location || "No area given"}
+            </p>
+
+            {r.join_note && (
+              <p
+                className="text-sm mb-2 p-2 rounded"
+                style={{ color: WHITE, backgroundColor: BG, wordBreak: "break-word" }}
+              >
+                {r.join_note}
+              </p>
+            )}
+
+            <p className="text-[11px] mb-3" style={{ color: MUTED }}>
+              Asked {formatWhen(r.submitted_at)}
+            </p>
+
+            <input
+              className="w-full p-2.5 rounded mb-2 text-xs"
+              style={{ backgroundColor: BG, border: "1px solid " + BORDER, color: WHITE }}
+              placeholder="Reason (only needed when rejecting)"
+              value={reasons[r.id] || ""}
+              maxLength={200}
+              onChange={(e) => setReasons({ ...reasons, [r.id]: e.target.value })}
+            />
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => decide(r, false)}
+                disabled={busy === r.id}
+                className="flex-1 py-2 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1 disabled:opacity-50"
+                style={{ border: "1.5px solid " + RED, color: RED }}
+              >
+                <XCircle size={13} /> Reject
+              </button>
+              <button
+                onClick={() => decide(r, true)}
+                disabled={busy === r.id}
+                className="flex-1 py-2 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1 disabled:opacity-50"
+                style={{ backgroundColor: GREEN, color: "#04240f" }}
+              >
+                {busy === r.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                Approve
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

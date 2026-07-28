@@ -217,10 +217,10 @@ export default function AppChrome({ children }) {
     !profile || verified
       ? null
       : status === "pending"
-      ? { Icon: Clock, color: GOLD, text: "Your identity is being reviewed. You can read the wall meanwhile." }
+      ? { Icon: Clock, color: GOLD, text: "Your request to join is being reviewed. You can read the wall meanwhile." }
       : status === "rejected"
-      ? { Icon: ShieldAlert, color: RED, text: "Verification wasn't approved — tap to submit again." }
-      : { Icon: ShieldCheck, color: GOLD, text: "Verify your identity to file a stand, stand with one, or speak out." };
+      ? { Icon: ShieldAlert, color: RED, text: "Your request wasn't approved — tap to ask again." }
+      : { Icon: ShieldCheck, color: GOLD, text: "Ask to join to file a stand, stand with one, or speak out." };
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: BG }}>
