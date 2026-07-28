@@ -16,11 +16,16 @@ export const DETAILS_LIMIT = 2000;
 // abandoned and its storage is reclaimed.
 export const ABANDON_DAYS = 30;
 
+// How many neighbours one approved member may vouch for. Kept small on
+// purpose: an invite has to feel like something you spend on someone you
+// actually know, not a link you paste into a group.
+export const INVITES_PER_MEMBER = 3;
+
 /**
- * A stand is "strong" once a fifth of the area's verified residents have joined
+ * A stand is "strong" once a fifth of the area's approved members have joined
  * it. A fixed number can't work: 50 is unreachable on launch day and trivial
  * later, so the bar moves with the community instead.
  */
-export function supportTarget(verifiedResidents) {
-  return Math.max(10, Math.round((verifiedResidents || 0) * 0.2));
+export function supportTarget(approvedMembers) {
+  return Math.max(10, Math.round((approvedMembers || 0) * 0.2));
 }

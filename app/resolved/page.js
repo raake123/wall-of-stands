@@ -22,7 +22,7 @@ function ResolvedBoard() {
   const [stands, setStands] = useState([]);
   const [voiceCounts, setVoiceCounts] = useState({});
   const [loading, setLoading] = useState(true);
-  const [residentCount, setResidentCount] = useState(0);
+  const [memberCount, setMemberCount] = useState(0);
 
   useEffect(() => {
     load();
@@ -41,11 +41,11 @@ function ResolvedBoard() {
       counts[v.stand_id] = (counts[v.stand_id] || 0) + 1;
     });
     setVoiceCounts(counts);
-    const { count: residents } = await supabase
+    const { count: members } = await supabase
       .from("profiles")
       .select("id", { count: "exact", head: true })
       .eq("verification_status", "verified");
-    setResidentCount(residents || 0);
+    setMemberCount(members || 0);
     setLoading(false);
   }
 
@@ -178,7 +178,7 @@ function ResolvedBoard() {
                   </span>
                 )}
               </div>
-              <StandCard stand={s} residentCount={residentCount} voiceCount={voiceCounts[s.id] || 0} />
+              <StandCard stand={s} memberCount={memberCount} voiceCount={voiceCounts[s.id] || 0} />
             </div>
           );
         })
@@ -190,7 +190,7 @@ function ResolvedBoard() {
             Moving, not finished ({inProgress.length})
           </p>
           {inProgress.map((s) => (
-            <StandCard key={s.id} stand={s} residentCount={residentCount} voiceCount={voiceCounts[s.id] || 0} />
+            <StandCard key={s.id} stand={s} memberCount={memberCount} voiceCount={voiceCounts[s.id] || 0} />
           ))}
         </>
       )}

@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, LogOut, MapPin, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, LogOut, MapPin, CheckCircle2, Loader2, Ticket, Copy, Check } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme-context";
 import { useAuth } from "../../lib/auth-context";
+import { INVITES_PER_MEMBER } from "../../lib/limits";
 import {
   detectLocation,
   formatLocation,
@@ -24,6 +25,8 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(null);
   const [stands, setStands] = useState([]);
   const [notFound, setNotFound] = useState(false);
+  const [inviter, setInviter] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   const [editingLoc, setEditingLoc] = useState(false);
   const [home, setHome] = useState(emptyLocation());
@@ -52,12 +55,35 @@ export default function ProfilePage() {
       state: p.home_state || "",
       country: p.home_country || "",
     });
+    // Who vouched for this person stays on show — that is what makes an invite
+    // worth something to the member spending it.
+    if (p.invited_by) {
+      const { data: inv } = await supabase
+        .from("profiles")
+        .select("name, username")
+        .eq("id", p.invited_by)
+        .maybeSingle();
+      setInviter(inv || null);
+    } else {
+      setInviter(null);
+    }
+
     const { data: s } = await supabase
       .from("stands")
       .select("*")
       .eq("user_id", p.id)
       .order("created_at", { ascending: false });
     setStands(s || []);
+  }
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(profile.invite_code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard blocked — the code is on screen to read out anyway */
+    }
   }
 
   async function handleDetect() {
@@ -129,6 +155,8 @@ export default function ProfilePage() {
   };
   const savedLocText = formatLocation(savedLoc) || profile.home_location || "";
   const inputStyle = { backgroundColor: BG, border: "1px solid " + BORDER, color: WHITE };
+  const isApproved = profile.verification_status === "verified";
+  const invitesLeft = profile.invites_left ?? 0;
 
   return (
     <div className="min-h-screen pb-10" style={{ backgroundColor: BG }}>
@@ -154,6 +182,14 @@ export default function ProfilePage() {
               {profile.name}
             </h1>
             <p className="text-sm truncate" style={{ color: MUTED }}>@{profile.username}</p>
+            {inviter && (
+              <p className="text-[11px] truncate" style={{ color: MUTED }}>
+                Vouched for by{" "}
+                <Link href={`/profile/${inviter.username}`} style={{ color: GOLD, fontWeight: 700 }}>
+                  {inviter.name}
+                </Link>
+              </p>
+            )}
           </div>
         </div>
 
@@ -250,6 +286,45 @@ export default function ProfilePage() {
             </p>
           )}
         </div>
+
+        {isMe && isApproved && profile.invite_code && (
+          <div className="rounded-lg p-4 mb-5" style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}>
+            <p
+              className="text-[10px] font-black uppercase tracking-wide mb-1 flex items-center gap-1.5"
+              style={{ color: MUTED }}
+            >
+              <Ticket size={12} style={{ color: GOLD }} />
+              Bring your neighbours in
+            </p>
+            <p className="text-[11px] mb-3" style={{ color: MUTED }}>
+              Give this code to someone who really lives here. They join straight
+              away, and your name stays on their profile as the one who vouched —
+              so only spend it on people you know.
+            </p>
+
+            <button
+              onClick={copyCode}
+              disabled={invitesLeft <= 0}
+              className="w-full py-3 rounded-lg flex items-center justify-center gap-3 disabled:opacity-50"
+              style={{ border: "1.5px dashed " + (invitesLeft > 0 ? GOLD : BORDER), backgroundColor: BG }}
+            >
+              <span
+                className="text-2xl font-black tracking-[0.25em]"
+                style={{ color: invitesLeft > 0 ? GOLD : MUTED }}
+              >
+                {invitesLeft > 0 ? profile.invite_code : "ALL USED"}
+              </span>
+              {invitesLeft > 0 &&
+                (copied ? <Check size={16} color={GREEN} /> : <Copy size={16} color={MUTED} />)}
+            </button>
+
+            <p className="text-[11px] mt-2 text-center" style={{ color: invitesLeft > 0 ? MUTED : RED }}>
+              {invitesLeft > 0
+                ? `${invitesLeft} of ${INVITES_PER_MEMBER} invites left${copied ? " · copied" : ""}`
+                : "You've used all your invites. Anyone else can still ask a reviewer to let them in."}
+            </p>
+          </div>
+        )}
 
         <div
           className="flex rounded-lg mb-6 overflow-hidden"

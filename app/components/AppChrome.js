@@ -205,7 +205,7 @@ export default function AppChrome({ children }) {
   const pathname = usePathname();
   const { colors, theme, toggleTheme } = useTheme();
   const { RED, GOLD, WHITE, BG, CARD, BORDER, MUTED } = colors;
-  const { session, profile, verified, recoveryMode } = useAuth();
+  const { session, profile, approved, recoveryMode } = useAuth();
 
   if (recoveryMode) return <RecoveryScreen />;
   if (!session) return <AuthScreen />;
@@ -213,14 +213,18 @@ export default function AppChrome({ children }) {
   const initial = profile ? profile.name.charAt(0).toUpperCase() : "";
   const status = profile?.verification_status || "unverified";
 
-  const verifyBanner =
-    !profile || verified
+  const joinBanner =
+    !profile || approved
       ? null
       : status === "pending"
       ? { Icon: Clock, color: GOLD, text: "Your request to join is being reviewed. You can read the wall meanwhile." }
       : status === "rejected"
       ? { Icon: ShieldAlert, color: RED, text: "Your request wasn't approved — tap to ask again." }
-      : { Icon: ShieldCheck, color: GOLD, text: "Ask to join to file a stand, stand with one, or speak out." };
+      : {
+          Icon: ShieldCheck,
+          color: GOLD,
+          text: "Join to file a stand, stand with one, or speak out. An invite code from a neighbour gets you in straight away.",
+        };
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: BG }}>
@@ -280,14 +284,14 @@ export default function AppChrome({ children }) {
       </div>
 
       <div className="max-w-md mx-auto px-4 py-5">
-        {verifyBanner && (
+        {joinBanner && (
           <Link
             href="/verify"
             className="flex items-start gap-2 rounded-lg p-3 mb-4 text-xs"
-            style={{ border: "1px solid " + verifyBanner.color, color: verifyBanner.color, backgroundColor: CARD }}
+            style={{ border: "1px solid " + joinBanner.color, color: joinBanner.color, backgroundColor: CARD }}
           >
-            <verifyBanner.Icon size={15} className="flex-shrink-0 mt-0.5" />
-            <span>{verifyBanner.text}</span>
+            <joinBanner.Icon size={15} className="flex-shrink-0 mt-0.5" />
+            <span>{joinBanner.text}</span>
           </Link>
         )}
         {children}

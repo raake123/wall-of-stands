@@ -17,7 +17,7 @@ function OngoingWall() {
   const router = useRouter();
   const { colors } = useTheme();
   const { RED, GOLD, WHITE, BG, CARD, BORDER, MUTED } = colors;
-  const { session, profile, verified, loading: authLoading } = useAuth();
+  const { session, profile, approved, loading: authLoading } = useAuth();
 
   const [stands, setStands] = useState([]);
   const [loadingStands, setLoadingStands] = useState(true);
@@ -26,7 +26,7 @@ function OngoingWall() {
   const [sortMode, setSortMode] = useState("new");
   const [burstId, setBurstId] = useState(null);
   const [voiceCounts, setVoiceCounts] = useState({});
-  const [residentCount, setResidentCount] = useState(0);
+  const [memberCount, setMemberCount] = useState(0);
 
   useEffect(() => {
     loadStands();
@@ -69,17 +69,17 @@ function OngoingWall() {
     setVoiceCounts(counts);
   }
 
-  // The "strong" bar scales with how many verified residents actually exist.
+  // The "strong" bar scales with how many approved members actually exist.
   async function loadResidentCount() {
     const { count } = await supabase
       .from("profiles")
       .select("id", { count: "exact", head: true })
       .eq("verification_status", "verified");
-    setResidentCount(count || 0);
+    setMemberCount(count || 0);
   }
 
   async function handleSupport(id) {
-    if (!session || !verified || mySupports.includes(id)) return;
+    if (!session || !approved || mySupports.includes(id)) return;
     setBurstId(id);
     setTimeout(() => setBurstId(null), 600);
 
@@ -215,9 +215,9 @@ function OngoingWall() {
         <StandCard
           key={s.id}
           stand={s}
-          residentCount={residentCount}
+          memberCount={memberCount}
           supported={mySupports.includes(s.id)}
-          onSupport={verified ? handleSupport : undefined}
+          onSupport={approved ? handleSupport : undefined}
           bursting={burstId === s.id}
           voiceCount={voiceCounts[s.id] || 0}
         />

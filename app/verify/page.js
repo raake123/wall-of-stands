@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Clock,
+  Ticket,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useTheme } from "../lib/theme-context";
@@ -17,6 +18,18 @@ import { useAuth } from "../lib/auth-context";
 import { detectLocation, formatLocation, emptyLocation, hasLocation } from "../lib/location";
 
 const NOTE_LIMIT = 300;
+const CODE_LENGTH = 6;
+
+// The database answers with a short code so the wording lives here, next to
+// everything else the person reads.
+const REDEEM_MESSAGES = {
+  invalid: "That code doesn't match anyone. Check it with whoever gave it to you — your request has gone to a reviewer meanwhile.",
+  used_up: "That member has used up their invites. Your request has gone to a reviewer instead.",
+  self: "That's your own code — you can't invite yourself.",
+  already: "You're already in.",
+  locked: "Too many wrong codes have been tried on this account, so codes are switched off for it. A reviewer can still let you in.",
+  noauth: "Your session expired. Log in again.",
+};
 
 export default function VerifyPage() {
   const router = useRouter();
@@ -25,9 +38,12 @@ export default function VerifyPage() {
   const { session, profile, loading, refreshProfile } = useAuth();
 
   const [note, setNote] = useState("");
+  const [code, setCode] = useState("");
   const [gps, setGps] = useState(emptyLocation());
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState("");
+  const [codeError, setCodeError] = useState("");
+  const [vouchedBy, setVouchedBy] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -66,6 +82,8 @@ export default function VerifyPage() {
     if (!hasLocation(gps)) return;
     setSubmitting(true);
     setError("");
+    setCodeError("");
+
     const { error: upErr } = await supabase
       .from("profiles")
       .update({
@@ -79,10 +97,60 @@ export default function VerifyPage() {
         submitted_at: new Date().toISOString(),
       })
       .eq("id", session.user.id);
-    if (upErr) setError(upErr.message);
-    else await refreshProfile();
+
+    if (upErr) {
+      setError(upErr.message);
+      setSubmitting(false);
+      return;
+    }
+
+    // A valid code lets someone in on the spot. If it fails for any reason the
+    // request simply stays with the reviewer, so nobody is left stuck.
+    if (code.trim()) {
+      const { data, error: rpcErr } = await supabase.rpc("redeem_invite", {
+        p_code: code.trim(),
+      });
+      if (rpcErr) setCodeError(rpcErr.message);
+      else if (typeof data === "string" && data.startsWith("ok:")) {
+        setVouchedBy(data.slice(3));
+      } else {
+        setCodeError(REDEEM_MESSAGES[data] || "That code couldn't be used.");
+      }
+    }
+
+    await refreshProfile();
     setSubmitting(false);
   }
+
+  // Someone can be sitting in the review queue when a neighbour finally hands
+  // them a code. No reason to make them wait it out.
+  async function redeemOnly() {
+    if (!code.trim()) return;
+    setSubmitting(true);
+    setCodeError("");
+    const { data, error: rpcErr } = await supabase.rpc("redeem_invite", {
+      p_code: code.trim(),
+    });
+    if (rpcErr) setCodeError(rpcErr.message);
+    else if (typeof data === "string" && data.startsWith("ok:")) setVouchedBy(data.slice(3));
+    else setCodeError(REDEEM_MESSAGES[data] || "That code couldn't be used.");
+    await refreshProfile();
+    setSubmitting(false);
+  }
+
+  const codeInput = (
+    <input
+      className="w-full p-3 rounded-lg text-lg font-black tracking-[0.3em] text-center uppercase"
+      style={{ backgroundColor: CARD, border: "1.5px solid " + (code ? GOLD : BORDER), color: GOLD }}
+      placeholder="······"
+      value={code}
+      maxLength={CODE_LENGTH}
+      autoCapitalize="characters"
+      autoCorrect="off"
+      spellCheck={false}
+      onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+    />
+  );
 
   if (loading || !profile) {
     return (
@@ -97,7 +165,7 @@ export default function VerifyPage() {
       ? {
           Icon: CheckCircle2,
           color: GREEN,
-          title: "You're in",
+          title: vouchedBy ? `You're in — ${vouchedBy} vouched for you` : "You're in",
           body: "You can file stands, stand with others, and speak out.",
         }
       : status === "pending"
@@ -130,9 +198,9 @@ export default function VerifyPage() {
           Ask to <span style={{ color: RED }}>join</span>
         </h1>
         <p className="text-sm mb-5" style={{ color: MUTED }}>
-          A stand only carries weight if the people behind it are real residents.
-          Every account is approved by a reviewer before it can file a stand or
-          stand with one.
+          A stand only carries weight if the people behind it really live here.
+          Every account is approved before it can file a stand or stand with one —
+          either by a neighbour who vouches for you, or by a reviewer.
         </p>
 
         {banner && (
@@ -141,10 +209,47 @@ export default function VerifyPage() {
             style={{ border: "1.5px solid " + banner.color, backgroundColor: CARD }}
           >
             <banner.Icon size={18} style={{ color: banner.color }} className="flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-black text-sm mb-0.5" style={{ color: banner.color }}>{banner.title}</p>
-              <p className="text-xs" style={{ color: MUTED }}>{banner.body}</p>
+            <div className="min-w-0">
+              <p className="font-black text-sm mb-0.5" style={{ color: banner.color, wordBreak: "break-word" }}>
+                {banner.title}
+              </p>
+              <p className="text-xs" style={{ color: MUTED, wordBreak: "break-word" }}>{banner.body}</p>
             </div>
+          </div>
+        )}
+
+        {codeError && status !== "verified" && (
+          <div
+            className="text-xs p-3 rounded mb-5"
+            style={{ border: "1.5px solid " + RED, color: RED, wordBreak: "break-word" }}
+          >
+            {codeError}
+          </div>
+        )}
+
+        {status === "pending" && (
+          <div className="rounded-lg p-4 mb-5" style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}>
+            <p
+              className="text-[10px] font-black uppercase tracking-wide mb-1 flex items-center gap-1.5"
+              style={{ color: MUTED }}
+            >
+              <Ticket size={12} style={{ color: GOLD }} />
+              Got an invite code since?
+            </p>
+            <p className="text-[11px] mb-3" style={{ color: MUTED }}>
+              Enter it here and you're in right away — no need to wait for the
+              reviewer.
+            </p>
+            {codeInput}
+            <button
+              onClick={redeemOnly}
+              disabled={!code.trim() || submitting}
+              className="w-full mt-2 py-2.5 rounded-full text-xs font-black uppercase tracking-wide flex items-center justify-center gap-1.5 disabled:opacity-40"
+              style={{ backgroundColor: GOLD, color: "#1a1400" }}
+            >
+              {submitting ? <Loader2 size={13} className="animate-spin" /> : <Ticket size={13} />}
+              Use code
+            </button>
           </div>
         )}
 
@@ -162,21 +267,49 @@ export default function VerifyPage() {
             </div>
 
             <p className="text-[10px] font-black uppercase tracking-wide mb-2" style={{ color: MUTED }}>
-              1 — Your area
+              1 — Invite code, if a neighbour gave you one
+            </p>
+            {codeInput}
+            <p className="text-[11px] mb-4 mt-1" style={{ color: MUTED }}>
+              With a code you're in immediately. Without one, a reviewer reads your
+              request first — both work.
+            </p>
+
+            <p className="text-[10px] font-black uppercase tracking-wide mb-2" style={{ color: MUTED }}>
+              2 — Your area
             </p>
             <button
               onClick={useMyLocation}
               disabled={locating}
               className="w-full py-3 rounded-lg mb-2 flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-wide disabled:opacity-50"
-              style={{
-                border: "1.5px solid " + (gpsText ? GOLD : BORDER),
-                color: gpsText ? "#1a1400" : WHITE,
-                backgroundColor: gpsText ? GOLD : CARD_ALT,
-              }}
+              style={{ border: "1.5px solid " + BORDER, color: WHITE, backgroundColor: CARD_ALT }}
             >
               {locating ? <Loader2 size={15} className="animate-spin" /> : <MapPin size={15} />}
-              {gpsText ? "Location captured — refresh" : "Use my location"}
+              {locating ? "Detecting..." : "Use my location"}
             </button>
+
+            {/* Plenty of people refuse the location prompt, and without a way to
+                type it they could never join at all — not even holding a valid
+                invite code. */}
+            <p className="text-[11px] mb-2" style={{ color: MUTED }}>
+              Or type it in yourself:
+            </p>
+            {[
+              { key: "area", ph: "Area / neighbourhood" },
+              { key: "city", ph: "City / district" },
+              { key: "state", ph: "State" },
+              { key: "country", ph: "Country" },
+            ].map((f) => (
+              <input
+                key={f.key}
+                className="w-full p-2.5 rounded mb-2 text-sm"
+                style={{ backgroundColor: CARD, border: "1px solid " + BORDER, color: WHITE }}
+                placeholder={f.ph}
+                value={gps[f.key]}
+                maxLength={80}
+                onChange={(e) => setGps({ ...gps, [f.key]: e.target.value })}
+              />
+            ))}
             {gpsText && (
               <p className="text-xs mb-4" style={{ color: GOLD, wordBreak: "break-word" }}>
                 {gpsText}
@@ -184,7 +317,7 @@ export default function VerifyPage() {
             )}
 
             <p className="text-[10px] font-black uppercase tracking-wide mb-2 mt-4" style={{ color: MUTED }}>
-              2 — Anything the reviewer should know (optional)
+              3 — Anything the reviewer should know (optional)
             </p>
             <textarea
               className="w-full p-3 rounded-lg mb-4 text-sm"
@@ -210,8 +343,8 @@ export default function VerifyPage() {
               className="w-full p-3.5 rounded-full font-black uppercase tracking-wide flex items-center justify-center gap-2 disabled:opacity-40"
               style={{ backgroundColor: RED, color: "#fff" }}
             >
-              {submitting ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-              {submitting ? "Sending..." : "Ask to join"}
+              {submitting ? <Loader2 size={16} className="animate-spin" /> : code ? <Ticket size={16} /> : <ShieldCheck size={16} />}
+              {submitting ? "Sending..." : code ? "Use code and join" : "Ask to join"}
             </button>
           </>
         )}

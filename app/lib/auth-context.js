@@ -55,13 +55,16 @@ export function AuthProvider({ children }) {
     setProfile(null);
   }
 
-  // Only a reviewed account may file a stand, stand with one, or speak out —
-  // an unverified crowd would make the support counts meaningless.
-  const verified = profile?.verification_status === "verified";
+  // Only an approved account may file a stand, stand with one, or speak out —
+  // an unchecked crowd would make the support counts meaningless. "Approved"
+  // is deliberately the word used everywhere: a person was reviewed or vouched
+  // for, which is not the same as being verified against a document, and the
+  // app should never claim more than it can show.
+  const approved = profile?.verification_status === "verified";
 
   return (
     <AuthContext.Provider
-      value={{ session, profile, verified, loading, recoveryMode, setRecoveryMode, refreshProfile, logout }}
+      value={{ session, profile, approved, loading, recoveryMode, setRecoveryMode, refreshProfile, logout }}
     >
       {children}
     </AuthContext.Provider>

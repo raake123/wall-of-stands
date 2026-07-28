@@ -51,7 +51,7 @@ export default function StandDetail() {
   const router = useRouter();
   const { colors } = useTheme();
   const { RED, GOLD, GREEN, WHITE, BG, CARD, BORDER, MUTED } = colors;
-  const { session, profile, verified } = useAuth();
+  const { session, profile, approved } = useAuth();
 
   const [stand, setStand] = useState(null);
   const [author, setAuthor] = useState(null);
@@ -70,7 +70,7 @@ export default function StandDetail() {
   const [notFound, setNotFound] = useState(false);
   const [draftProgress, setDraftProgress] = useState(0);
   const [savingProgress, setSavingProgress] = useState(false);
-  const [residentCount, setResidentCount] = useState(0);
+  const [memberCount, setMemberCount] = useState(0);
   const [deletingVoice, setDeletingVoice] = useState(null);
   const [confirmVoice, setConfirmVoice] = useState(null);
 
@@ -129,7 +129,7 @@ export default function StandDetail() {
       .from("profiles")
       .select("id", { count: "exact", head: true })
       .eq("verification_status", "verified");
-    setResidentCount(count || 0);
+    setMemberCount(count || 0);
 
     const { data: ups } = await supabase
       .from("stand_updates")
@@ -140,7 +140,7 @@ export default function StandDetail() {
   }
 
   async function handleSupport() {
-    if (!session || !verified || supported || stand.resolved_at) return;
+    if (!session || !approved || supported || stand.resolved_at) return;
     setSupported(true);
     const me = homeLocOf(profile) || {};
     const inside = isInsideArea(locOf(stand), me);
@@ -207,7 +207,7 @@ export default function StandDetail() {
   }
 
   async function handlePostVoice(blob) {
-    if (!session || !verified || myVoiceCount >= VOICES_PER_STAND) return;
+    if (!session || !approved || myVoiceCount >= VOICES_PER_STAND) return;
     setPostingVoice(true);
     setVoiceError("");
     const ext = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
@@ -282,7 +282,7 @@ export default function StandDetail() {
   const myVoiceCount = session
     ? voices.filter((v) => v.user_id === session.user.id).length
     : 0;
-  const target = supportTarget(residentCount);
+  const target = supportTarget(memberCount);
   const reached = (stand.support_count || 0) >= target;
   const targetPct = Math.min(100, Math.round(((stand.support_count || 0) / target) * 100));
   const voicesFull = voices.length >= MAX_VOICES_PER_STAND;
@@ -494,7 +494,7 @@ export default function StandDetail() {
         <div className="flex items-center gap-3 mb-6">
           <button
             onClick={handleSupport}
-            disabled={supported || !session || !verified || isResolved}
+            disabled={supported || !session || !approved || isResolved}
             className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 disabled:opacity-70"
             style={
               supported
@@ -779,7 +779,7 @@ export default function StandDetail() {
                 className="w-full py-3 rounded-full text-[11px] font-bold text-center"
                 style={{ border: "1px solid " + BORDER, color: MUTED }}
               >
-                Voices closed — {MAX_VOICES_PER_STAND} residents have spoken
+                Voices closed — {MAX_VOICES_PER_STAND} people have spoken
               </div>
             ) : (
               <VoiceRecorder

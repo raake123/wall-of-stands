@@ -32,7 +32,7 @@ function Composer() {
   const router = useRouter();
   const { colors } = useTheme();
   const { RED, GOLD, WHITE, BG, CARD, CARD_ALT, BORDER, MUTED } = colors;
-  const { session, profile, verified } = useAuth();
+  const { session, profile, approved } = useAuth();
 
   const [text, setText] = useState("");
   const [category, setCategory] = useState(CAUSES[0].name);
@@ -111,7 +111,7 @@ function Composer() {
   }
 
   async function handlePost() {
-    if (!text.trim() || dropPhase !== "idle" || !session || !verified) return;
+    if (!text.trim() || dropPhase !== "idle" || !session || !approved) return;
     setDropPhase("forming");
     setTimeout(() => {
       setDropPhase("falling");

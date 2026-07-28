@@ -29,7 +29,7 @@ export function formatWhen(ts) {
 
 export default function StandCard({
   stand: s,
-  residentCount = 0,
+  memberCount = 0,
   supported,
   onSupport,
   bursting,
@@ -49,7 +49,7 @@ export default function StandCard({
     s.photo_urls?.[0] || (s.media_type === "photo" ? s.media_url : null);
   const thumbVideo = s.video_url || (s.media_type === "video" ? s.media_url : null);
   const extraPhotos = Math.max(0, (s.photo_urls?.length || 0) - 1);
-  const target = supportTarget(residentCount);
+  const target = supportTarget(memberCount);
   const targetPct = Math.min(100, Math.round(((s.support_count || 0) / target) * 100));
 
   const glowClass = isResolved

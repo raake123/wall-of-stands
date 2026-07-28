@@ -10,6 +10,7 @@ import {
   XCircle,
   Clock,
   Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme-context";
@@ -139,8 +140,10 @@ export default function AdminVerifyPage() {
           Join requests
         </h1>
         <p className="text-xs mb-5" style={{ color: MUTED }}>
-          Approve people you can place as real residents of the area. No documents
-          are collected — this is your judgement, so approve who you know.
+          These are people with no invite code, so approving them is your
+          judgement alone — no documents are collected. Approve the ones you can
+          place as really living in the area. Anyone vouched for by a member is
+          already in and never appears here.
         </p>
 
         <div className="rounded-lg p-3 mb-5" style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}>
@@ -213,6 +216,14 @@ export default function AdminVerifyPage() {
             <p className="text-[11px] mb-3" style={{ color: MUTED }}>
               Asked {formatWhen(r.submitted_at)}
             </p>
+
+            {r.invite_attempts >= 10 && (
+              <p className="text-[11px] mb-3 flex items-start gap-1.5" style={{ color: RED }}>
+                <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
+                Tried 10 wrong invite codes. Could be someone guessing their way
+                in — worth being sure who this is.
+              </p>
+            )}
 
             <input
               className="w-full p-2.5 rounded mb-2 text-xs"
