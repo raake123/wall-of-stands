@@ -16,6 +16,9 @@ import {
   Globe,
   Loader2,
   Trash2,
+  Send,
+  FileText,
+  Hourglass,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme-context";
@@ -23,7 +26,15 @@ import { useAuth } from "../../lib/auth-context";
 import { causeFor, tierFor } from "../../lib/causes";
 import { isInsideArea, formatLocation, locOf, hasLocation } from "../../lib/location";
 import VoiceRecorder from "../../components/VoiceRecorder";
+import ReportButton from "../../components/ReportButton";
 import { VOICES_PER_STAND, MAX_VOICES_PER_STAND, supportTarget } from "../../lib/limits";
+import {
+  buildComplaint,
+  whatsappLink,
+  daysSince,
+  GCC_LABEL,
+  GCC_NUMBER_HUMAN,
+} from "../../lib/filing";
 
 function formatWhen(ts) {
   if (!ts) return "";
@@ -73,6 +84,8 @@ export default function StandDetail() {
   const [memberCount, setMemberCount] = useState(0);
   const [deletingVoice, setDeletingVoice] = useState(null);
   const [confirmVoice, setConfirmVoice] = useState(null);
+  const [refDraft, setRefDraft] = useState("");
+  const [savingFiling, setSavingFiling] = useState(false);
 
   useEffect(() => {
     load();
@@ -87,6 +100,7 @@ export default function StandDetail() {
     setStand(s);
     setDetails(s.details || "");
     setDraftProgress(s.progress || 0);
+    setRefDraft(s.complaint_ref || "");
 
     const { data: prof } = await supabase
       .from("profiles")
@@ -147,6 +161,7 @@ export default function StandDetail() {
     const { error } = await supabase.from("supports").insert({
       stand_id: stand.id,
       user_id: session.user.id,
+      inside,
       area: me.area || null,
       city: me.city || null,
       state: me.state || null,
@@ -173,6 +188,28 @@ export default function StandDetail() {
       if (resolve) router.push("/resolved");
       else load();
     }
+  }
+
+  // WhatsApp opens with the complaint already written; the person still taps
+  // send themselves. We only record that it went out, so the clock can start.
+  async function markFiled() {
+    setSavingFiling(true);
+    await supabase
+      .from("stands")
+      .update({ filed_at: new Date().toISOString(), filed_by: session.user.id })
+      .eq("id", stand.id);
+    setSavingFiling(false);
+    load();
+  }
+
+  async function saveComplaintRef() {
+    setSavingFiling(true);
+    await supabase
+      .from("stands")
+      .update({ complaint_ref: refDraft.trim() || null })
+      .eq("id", stand.id);
+    setSavingFiling(false);
+    load();
   }
 
   async function handleDeleteVoice(v) {
@@ -313,6 +350,11 @@ export default function StandDetail() {
               <p className="text-xs font-black truncate" style={{ color: WHITE }}>
                 {sp?.name || "Someone"}
               </p>
+              {session && v.user_id !== session.user.id && (
+                <span className="flex-shrink-0">
+                  <ReportButton voiceId={v.id} compact />
+                </span>
+              )}
               {session && v.user_id === session.user.id && (
                 confirmVoice === v.id ? (
                   <span className="flex items-center gap-1 flex-shrink-0">
@@ -360,6 +402,11 @@ export default function StandDetail() {
           </div>
         </div>
         <audio src={v.audio_url} controls className="w-full" />
+        {v.hidden_at && (
+          <p className="text-[10px] font-bold mt-2" style={{ color: RED }}>
+            Hidden by a reviewer{v.hidden_reason ? ` — ${v.hidden_reason}` : ""}. Only you can see it.
+          </p>
+        )}
       </div>
     );
   }
@@ -371,6 +418,19 @@ export default function StandDetail() {
           <ArrowLeft size={14} />
           Back to the wall
         </Link>
+
+        {stand.hidden_at && (
+          <div
+            className="rounded-lg p-3 mb-4 text-xs"
+            style={{ border: "1.5px solid " + RED, color: RED, backgroundColor: CARD }}
+          >
+            <p className="font-black uppercase mb-0.5">Hidden by a reviewer</p>
+            <p style={{ wordBreak: "break-word" }}>
+              {stand.hidden_reason || "This stand was reported and taken off the wall."}{" "}
+              Only you and the reviewer can see it.
+            </p>
+          </div>
+        )}
 
         <div className="flex items-center justify-between mb-4 gap-2">
           <span
@@ -611,6 +671,103 @@ export default function StandDetail() {
           )}
         </div>
 
+        {/* Taking it to the Corporation. The waiting clock is public on
+            purpose — an unanswered complaint is the whole argument. */}
+        <div className="rounded-lg p-4 mb-6" style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}>
+          <p className="text-xs font-black uppercase tracking-wide mb-2" style={{ color: MUTED }}>
+            Taken to {GCC_LABEL}?
+          </p>
+
+          {stand.filed_at ? (
+            <>
+              <p className="text-sm font-bold flex items-center gap-1.5 mb-1" style={{ color: GREEN }}>
+                <Send size={14} />
+                Filed on {formatWhen(stand.filed_at)}
+              </p>
+              {stand.complaint_ref && (
+                <p
+                  className="text-sm flex items-center gap-1.5 mb-1"
+                  style={{ color: WHITE, wordBreak: "break-word" }}
+                >
+                  <FileText size={14} style={{ color: GOLD }} />
+                  Complaint no. <span style={{ color: GOLD, fontWeight: 700 }}>{stand.complaint_ref}</span>
+                </p>
+              )}
+              {!isResolved && (
+                <p className="text-sm font-black flex items-center gap-1.5" style={{ color: RED }}>
+                  <Hourglass size={14} />
+                  {daysSince(stand.filed_at)} {daysSince(stand.filed_at) === 1 ? "day" : "days"} waiting
+                  for an answer
+                </p>
+              )}
+
+              {(isMine || profile?.is_admin) && !stand.complaint_ref && (
+                <div className="mt-3">
+                  <p className="text-[11px] mb-2" style={{ color: MUTED }}>
+                    When the Corporation replies with a complaint number, put it here so
+                    everyone can track it.
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 min-w-0 p-2.5 rounded text-sm"
+                      style={{ backgroundColor: BG, border: "1px solid " + BORDER, color: WHITE }}
+                      placeholder="Complaint number"
+                      value={refDraft}
+                      maxLength={60}
+                      onChange={(e) => setRefDraft(e.target.value)}
+                    />
+                    <button
+                      onClick={saveComplaintRef}
+                      disabled={savingFiling || !refDraft.trim()}
+                      className="px-4 rounded-full text-xs font-black uppercase disabled:opacity-40 flex-shrink-0"
+                      style={{ backgroundColor: GOLD, color: "#1a1400" }}
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : isMine || profile?.is_admin ? (
+            <>
+              <p className="text-[11px] mb-3" style={{ color: MUTED }}>
+                This opens WhatsApp to {GCC_NUMBER_HUMAN} with the complaint already
+                written — the issue, the area, and how many residents are behind it.
+                You still tap send yourself. Nothing is sent without you.
+              </p>
+
+              {(stand.support_count || 0) < target && (
+                <p className="text-[11px] mb-3" style={{ color: GOLD }}>
+                  This stand has {stand.support_count || 0} of {target}. You can file now,
+                  but a stand with more names behind it is much harder to set aside.
+                </p>
+              )}
+
+              <a
+                href={whatsappLink(
+                  buildComplaint(stand, {
+                    supporters: stand.support_count || 0,
+                    voices: voices.length,
+                  })
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={markFiled}
+                className="w-full py-3 rounded-full text-xs font-black uppercase tracking-wide flex items-center justify-center gap-2"
+                style={{ backgroundColor: GREEN, color: "#04240f" }}
+              >
+                {savingFiling ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                File on WhatsApp
+              </a>
+            </>
+          ) : (
+            <p className="text-[11px]" style={{ color: MUTED }}>
+              Not filed with the Corporation yet. Only the person who raised this
+              stand can send it.
+            </p>
+          )}
+        </div>
+
         <div className="rounded-lg p-4 mb-6" style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}>
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs font-black uppercase tracking-wide" style={{ color: MUTED }}>The full story</p>
@@ -832,6 +989,12 @@ export default function StandDetail() {
           <p className="text-xs" style={{ color: MUTED }}>
             No one has spoken out yet. Be the first voice on this issue.
           </p>
+        )}
+
+        {!isMine && (
+          <div className="mt-8 pt-4" style={{ borderTop: "1px solid " + BORDER }}>
+            <ReportButton standId={stand.id} />
+          </div>
         )}
       </div>
     </div>

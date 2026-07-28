@@ -16,6 +16,10 @@ export const DETAILS_LIMIT = 2000;
 // abandoned and its storage is reclaimed.
 export const ABANDON_DAYS = 30;
 
+// Stands fetched per page. Bandwidth is the first free-tier limit this app
+// would hit, so the wall loads a screenful at a time rather than all of it.
+export const FEED_PAGE_SIZE = 15;
+
 // How many neighbours one approved member may vouch for. Kept small on
 // purpose: an invite has to feel like something you spend on someone you
 // actually know, not a link you paste into a group.

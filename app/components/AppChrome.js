@@ -22,11 +22,16 @@ function AuthScreen() {
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [authMode, setAuthMode] = useState("login");
+  const [agreed, setAgreed] = useState(false);
 
   async function handleSignUp() {
     setAuthError("");
     if (!email.trim() || !password.trim()) {
       setAuthError("Enter an email and password first.");
+      return;
+    }
+    if (!agreed) {
+      setAuthError("Please read and accept the privacy notice and rules first.");
       return;
     }
     const { error } = await supabase.auth.signUp({ email: email.trim(), password });
@@ -140,6 +145,26 @@ function AuthScreen() {
           </button>
         )}
 
+        {authMode === "signup" && (
+          <label className="flex items-start gap-2 mb-1 mt-1 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-0.5 flex-shrink-0"
+              style={{ accentColor: GOLD }}
+            />
+            <span className="text-[11px]" style={{ color: MUTED }}>
+              I've read the{" "}
+              <Link href="/privacy" style={{ color: GOLD, fontWeight: 700 }}>
+                privacy notice and rules
+              </Link>
+              , and I agree my name, area and stands are visible to other members. No
+              Aadhaar or ID is ever asked for.
+            </span>
+          </label>
+        )}
+
         <button
           onClick={authMode === "login" ? handleLogIn : handleSignUp}
           className="w-full p-3 rounded-full font-bold uppercase tracking-wide mt-2"
@@ -147,6 +172,14 @@ function AuthScreen() {
         >
           {authMode === "login" ? "Log In" : "Sign Up"}
         </button>
+
+        <Link
+          href="/privacy"
+          className="block text-center text-[11px] font-bold mt-5"
+          style={{ color: MUTED }}
+        >
+          Privacy & rules
+        </Link>
       </div>
     </div>
   );

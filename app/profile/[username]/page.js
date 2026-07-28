@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, LogOut, MapPin, CheckCircle2, Loader2, Ticket, Copy, Check } from "lucide-react";
+import { ArrowLeft, LogOut, MapPin, CheckCircle2, Loader2, Ticket, Copy, Check, Trash2 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme-context";
 import { useAuth } from "../../lib/auth-context";
@@ -27,6 +27,9 @@ export default function ProfilePage() {
   const [notFound, setNotFound] = useState(false);
   const [inviter, setInviter] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const [editingLoc, setEditingLoc] = useState(false);
   const [home, setHome] = useState(emptyLocation());
@@ -120,6 +123,31 @@ export default function ProfilePage() {
   }
 
   async function handleLogOut() {
+    await logout();
+    router.push("/");
+  }
+
+  // Files have to go before the account does — once the login is gone there is
+  // no authenticated session left to delete them with.
+  async function deleteAccount() {
+    setDeleting(true);
+    setDeleteError("");
+
+    const { data: myVoices } = await supabase
+      .from("voices")
+      .select("audio_url")
+      .eq("user_id", session.user.id);
+    const paths = (myVoices || [])
+      .map((v) => v.audio_url?.split("/stand-media/")[1])
+      .filter(Boolean);
+    if (paths.length) await supabase.storage.from("stand-media").remove(paths);
+
+    const { error } = await supabase.rpc("delete_my_account");
+    if (error) {
+      setDeleteError(error.message);
+      setDeleting(false);
+      return;
+    }
     await logout();
     router.push("/");
   }
@@ -385,15 +413,79 @@ export default function ProfilePage() {
         ))}
 
         {isMe && (
-          <button
-            onClick={handleLogOut}
-            className="w-full py-3 rounded-full mt-6 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wide"
-            style={{ border: "1.5px solid " + BORDER, color: MUTED }}
-          >
-            <LogOut size={14} />
-            Log out
-          </button>
+          <>
+            <button
+              onClick={handleLogOut}
+              className="w-full py-3 rounded-full mt-6 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wide"
+              style={{ border: "1.5px solid " + BORDER, color: MUTED }}
+            >
+              <LogOut size={14} />
+              Log out
+            </button>
+
+            <div className="mt-8 pt-5" style={{ borderTop: "1px solid " + BORDER }}>
+              {confirmDelete ? (
+                <div className="rounded-lg p-4" style={{ border: "1.5px solid " + RED, backgroundColor: CARD }}>
+                  <p className="text-sm font-black mb-2" style={{ color: RED }}>
+                    Delete your account?
+                  </p>
+                  <p className="text-xs mb-1" style={{ color: MUTED }}>
+                    Gone immediately and for good: your profile, your login, and every
+                    voice recording you made.
+                  </p>
+                  <p className="text-xs mb-3" style={{ color: MUTED }}>
+                    Stands you filed stay on the wall with your name removed — other
+                    people have joined them and spoken on them.
+                  </p>
+                  {deleteError && (
+                    <p className="text-xs mb-2" style={{ color: RED, wordBreak: "break-word" }}>
+                      {deleteError}
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setConfirmDelete(false);
+                        setDeleteError("");
+                      }}
+                      disabled={deleting}
+                      className="flex-1 py-2 rounded-full text-xs font-black uppercase disabled:opacity-40"
+                      style={{ border: "1px solid " + BORDER, color: MUTED }}
+                    >
+                      Keep my account
+                    </button>
+                    <button
+                      onClick={deleteAccount}
+                      disabled={deleting}
+                      className="flex-1 py-2 rounded-full text-xs font-black uppercase flex items-center justify-center gap-1 disabled:opacity-40"
+                      style={{ backgroundColor: RED, color: "#fff" }}
+                    >
+                      {deleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="text-xs font-bold flex items-center gap-1.5 mx-auto"
+                  style={{ color: MUTED }}
+                >
+                  <Trash2 size={12} />
+                  Delete my account and data
+                </button>
+              )}
+            </div>
+          </>
         )}
+
+        <Link
+          href="/privacy"
+          className="block text-center text-[11px] font-bold mt-8"
+          style={{ color: BORDER }}
+        >
+          Privacy & rules
+        </Link>
       </div>
     </div>
   );

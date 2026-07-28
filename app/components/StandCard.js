@@ -10,11 +10,14 @@ import {
   Trophy,
   Flame,
   CheckCircle2,
+  Hourglass,
+  Send,
 } from "lucide-react";
 import { useTheme } from "../lib/theme-context";
 import { causeFor, tierFor } from "../lib/causes";
 import { formatLocation, locOf, hasLocation } from "../lib/location";
 import { supportTarget } from "../lib/limits";
+import { daysSince } from "../lib/filing";
 
 export function formatWhen(ts) {
   if (!ts) return "";
@@ -172,6 +175,19 @@ export default function StandCard({
           {formatWhen(s.created_at)}
         </p>
       </div>
+
+      {/* An unanswered complaint counting up in public is the whole point. */}
+      {s.filed_at && (
+        <p className="text-[11px] font-bold flex items-center gap-1 mb-2" style={{ color: isResolved ? GREEN : RED }}>
+          {isResolved ? <Send size={12} /> : <Hourglass size={12} />}
+          {isResolved
+            ? "Filed and resolved"
+            : `Filed · ${daysSince(s.filed_at)} ${daysSince(s.filed_at) === 1 ? "day" : "days"} waiting`}
+          {s.complaint_ref && (
+            <span style={{ color: MUTED, fontWeight: 400 }}>· no. {s.complaint_ref}</span>
+          )}
+        </p>
+      )}
 
       {(progress > 0 || isResolved) && (
         <div className="mb-2">

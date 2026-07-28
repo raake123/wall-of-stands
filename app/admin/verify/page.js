@@ -11,6 +11,8 @@ import {
   Clock,
   Trash2,
   AlertTriangle,
+  Flag,
+  EyeOff,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useTheme } from "../../lib/theme-context";
@@ -39,9 +41,14 @@ export default function AdminVerifyPage() {
   const [loadingRows, setLoadingRows] = useState(true);
   const [cleaning, setCleaning] = useState(false);
   const [cleanMsg, setCleanMsg] = useState("");
+  const [reports, setReports] = useState([]);
+  const [reportBusy, setReportBusy] = useState(null);
 
   useEffect(() => {
-    if (profile?.is_admin) load();
+    if (profile?.is_admin) {
+      load();
+      loadReports();
+    }
   }, [profile]);
 
   async function load() {
@@ -53,6 +60,45 @@ export default function AdminVerifyPage() {
       .order("submitted_at", { ascending: true });
     setRows(data || []);
     setLoadingRows(false);
+  }
+
+  async function loadReports() {
+    const { data } = await supabase.rpc("open_reports");
+    setReports(data || []);
+  }
+
+  // Hiding takes it off the wall for everyone but its author; dismissing says
+  // the report was looked at and the content stays. Either way the report is
+  // closed, which is what the IT Rules ask for — that complaints get answered.
+  async function actOnReport(r, hide) {
+    setReportBusy(r.report_id);
+    if (hide) {
+      const patch = { hidden_at: new Date().toISOString(), hidden_reason: r.reason };
+      await supabase
+        .from(r.kind === "stand" ? "stands" : "voices")
+        .update(patch)
+        .eq("id", r.target_id);
+    }
+    await supabase
+      .from("reports")
+      .update({ handled_at: new Date().toISOString() })
+      .eq("id", r.report_id);
+    setReportBusy(null);
+    loadReports();
+  }
+
+  async function unhide(r) {
+    setReportBusy(r.report_id);
+    await supabase
+      .from(r.kind === "stand" ? "stands" : "voices")
+      .update({ hidden_at: null, hidden_reason: null })
+      .eq("id", r.target_id);
+    await supabase
+      .from("reports")
+      .update({ handled_at: new Date().toISOString() })
+      .eq("id", r.report_id);
+    setReportBusy(null);
+    loadReports();
   }
 
   // Stands nobody joined and nobody spoke on are dead weight on the storage
@@ -145,6 +191,104 @@ export default function AdminVerifyPage() {
           place as really living in the area. Anyone vouched for by a member is
           already in and never appears here.
         </p>
+
+        {reports.length > 0 && (
+          <div className="mb-6">
+            <p
+              className="text-xs font-black uppercase tracking-wide mb-1 flex items-center gap-1.5"
+              style={{ color: RED }}
+            >
+              <Flag size={13} />
+              Reported ({reports.length})
+            </p>
+            <p className="text-[11px] mb-3" style={{ color: MUTED }}>
+              Every report has to get an answer. Hiding takes it off the wall for
+              everyone except the person who posted it.
+            </p>
+
+            {reports.map((r) => (
+              <div
+                key={r.report_id}
+                className="rounded-lg p-3 mb-3"
+                style={{ backgroundColor: CARD, border: "1.5px solid " + RED }}
+              >
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span
+                    className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full"
+                    style={{ border: "1px solid " + MUTED, color: MUTED }}
+                  >
+                    {r.kind}
+                  </span>
+                  {r.report_count > 1 && (
+                    <span className="text-[10px] font-black" style={{ color: RED }}>
+                      {r.report_count} people reported this
+                    </span>
+                  )}
+                </div>
+
+                {r.headline && (
+                  <p
+                    className="text-sm font-bold mb-1"
+                    style={{ color: WHITE, wordBreak: "break-word" }}
+                  >
+                    {r.headline}
+                  </p>
+                )}
+                {r.audio_url && <audio src={r.audio_url} controls className="w-full mb-2" />}
+
+                <p className="text-xs mb-1" style={{ color: RED, wordBreak: "break-word" }}>
+                  {r.reason}
+                </p>
+                <p className="text-[10px] mb-2" style={{ color: MUTED }}>
+                  Reported by {r.reporter} · {formatWhen(r.created_at)}
+                  {r.hidden ? " · already hidden" : ""}
+                </p>
+
+                <div className="flex gap-2 items-center">
+                  <Link
+                    href={`/stand/${r.stand_id}`}
+                    className="text-[11px] font-bold"
+                    style={{ color: GOLD }}
+                  >
+                    Open
+                  </Link>
+                  <button
+                    onClick={() => actOnReport(r, false)}
+                    disabled={reportBusy === r.report_id}
+                    className="flex-1 py-1.5 rounded-full text-[11px] font-black uppercase disabled:opacity-40"
+                    style={{ border: "1.5px solid " + BORDER, color: MUTED }}
+                  >
+                    Leave it up
+                  </button>
+                  {r.hidden ? (
+                    <button
+                      onClick={() => unhide(r)}
+                      disabled={reportBusy === r.report_id}
+                      className="flex-1 py-1.5 rounded-full text-[11px] font-black uppercase disabled:opacity-40"
+                      style={{ backgroundColor: GREEN, color: "#04240f" }}
+                    >
+                      Put it back
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => actOnReport(r, true)}
+                      disabled={reportBusy === r.report_id}
+                      className="flex-1 py-1.5 rounded-full text-[11px] font-black uppercase disabled:opacity-40 flex items-center justify-center gap-1"
+                      style={{ backgroundColor: RED, color: "#fff" }}
+                    >
+                      {reportBusy === r.report_id ? (
+                        <Loader2 size={11} className="animate-spin" />
+                      ) : (
+                        <EyeOff size={11} />
+                      )}
+                      Hide
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="rounded-lg p-3 mb-5" style={{ backgroundColor: CARD, border: "1px solid " + BORDER }}>
           <p className="text-[10px] font-black uppercase tracking-wide mb-1" style={{ color: MUTED }}>
