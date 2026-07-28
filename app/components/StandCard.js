@@ -42,7 +42,6 @@ export default function StandCard({
   const cause = causeFor(s.category);
   const CIcon = cause.Icon;
   const tier = tierFor(s.support_count);
-  const momentumPct = Math.min((s.support_count || 0) * 6, 100);
   const progress = s.progress || 0;
   const isResolved = Boolean(s.resolved_at);
   const locationText = formatLocation(locOf(s)) || s.location_label || "";
@@ -174,18 +173,6 @@ export default function StandCard({
         </p>
       </div>
 
-      <div className="mb-1">
-        <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: BORDER }}>
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{
-              width: momentumPct + "%",
-              background: "linear-gradient(to right, " + RED + ", " + GOLD + ")",
-            }}
-          />
-        </div>
-      </div>
-
       {(progress > 0 || isResolved) && (
         <div className="mb-2">
           <div className="flex items-center justify-between mb-1">
@@ -239,9 +226,11 @@ export default function StandCard({
         <div className="mb-2">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-black uppercase tracking-wide" style={{ color: MUTED }}>
-              {(s.support_count || 0) >= target
-                ? "Strong stand"
-                : `${target - (s.support_count || 0)} more to be strong`}
+              {(() => {
+                const need = target - (s.support_count || 0);
+                if (need <= 0) return "Strong stand";
+                return `Needs ${need} more stand${need === 1 ? "" : "s"} to be strong`;
+              })()}
             </span>
             <span
               className="text-[10px] font-black"

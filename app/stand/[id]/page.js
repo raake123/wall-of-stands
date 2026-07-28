@@ -257,7 +257,6 @@ export default function StandDetail() {
   const cause = causeFor(stand.category);
   const CIcon = cause.Icon;
   const tier = tierFor(stand.support_count);
-  const momentumPct = Math.min((stand.support_count || 0) * 6, 100);
   const isMine = session && stand.user_id === session.user.id;
   const initial = author ? author.name.charAt(0).toUpperCase() : "?";
   const standLoc = locOf(stand);
@@ -492,15 +491,6 @@ export default function StandDetail() {
         )}
         {stand.audio_url && <audio src={stand.audio_url} controls className="w-full mb-4" />}
 
-        <div className="mb-2">
-          <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: BORDER }}>
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{ width: momentumPct + "%", background: "linear-gradient(to right, " + RED + ", " + GOLD + ")" }}
-            />
-          </div>
-        </div>
-
         <div className="flex items-center gap-3 mb-6">
           <button
             onClick={handleSupport}
@@ -534,7 +524,12 @@ export default function StandDetail() {
           <div className="mb-6">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-black uppercase tracking-wide" style={{ color: MUTED }}>
-                {reached ? "Strong stand" : `Needs ${target - (stand.support_count || 0)} more to be strong`}
+                {reached
+                  ? "Strong stand"
+                  : (() => {
+                      const need = target - (stand.support_count || 0);
+                      return `Needs ${need} more stand${need === 1 ? "" : "s"} to be strong`;
+                    })()}
               </span>
               <span className="text-[10px] font-black" style={{ color: reached ? GREEN : GOLD }}>
                 {stand.support_count || 0}/{target}
