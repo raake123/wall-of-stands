@@ -18,6 +18,7 @@ import { useTheme } from "../lib/theme-context";
 import { useAuth } from "../lib/auth-context";
 import { CAUSES } from "../lib/causes";
 import { detectLocation, formatLocation, emptyLocation } from "../lib/location";
+import { compressImage, formatBytes, MAX_VIDEO_BYTES } from "../lib/compress";
 import AppChrome from "../components/AppChrome";
 
 const TEXT_LIMIT = 120;
@@ -53,13 +54,32 @@ function Composer() {
 
   const locationText = formatLocation(location);
 
-  function handleMediaSelect(e) {
+  async function handleMediaSelect(e) {
     const file = e.target.files[0];
     e.target.value = "";
     if (!file) return;
-    setMediaFile(file);
-    setMediaType(file.type.startsWith("video") ? "video" : "photo");
-    setMediaPreview(URL.createObjectURL(file));
+    setPostError("");
+
+    if (file.type.startsWith("video")) {
+      // A single long clip can eat a large share of the storage quota.
+      if (file.size > MAX_VIDEO_BYTES) {
+        setPostError(
+          `That video is ${formatBytes(file.size)} — please keep videos under ${formatBytes(
+            MAX_VIDEO_BYTES
+          )} (about 15 seconds), or attach a photo instead.`
+        );
+        return;
+      }
+      setMediaFile(file);
+      setMediaType("video");
+      setMediaPreview(URL.createObjectURL(file));
+      return;
+    }
+
+    const shrunk = await compressImage(file);
+    setMediaFile(shrunk);
+    setMediaType("photo");
+    setMediaPreview(URL.createObjectURL(shrunk));
   }
 
   function clearMedia() {

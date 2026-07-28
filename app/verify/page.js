@@ -18,6 +18,7 @@ import { supabase } from "../lib/supabase";
 import { useTheme } from "../lib/theme-context";
 import { useAuth } from "../lib/auth-context";
 import { detectLocation, formatLocation, emptyLocation } from "../lib/location";
+import { compressImage } from "../lib/compress";
 
 export default function VerifyPage() {
   const router = useRouter();
@@ -59,17 +60,20 @@ export default function VerifyPage() {
   const gpsText = formatLocation(gps);
 
   function pick(setFile, setPreview) {
-    return (e) => {
+    return async (e) => {
       const f = e.target.files[0];
       e.target.value = "";
       if (!f) return;
-      if (f.size > 6 * 1024 * 1024) {
-        setError("That file is over 6MB — please use a smaller image.");
+      setError("");
+      // Shrunk in the browser first — 1600px still leaves an ID clearly
+      // readable for the reviewer at a fraction of the storage.
+      const shrunk = await compressImage(f);
+      if (shrunk.size > 6 * 1024 * 1024) {
+        setError("That file is too large even after compression — try a smaller image.");
         return;
       }
-      setError("");
-      setFile(f);
-      setPreview(URL.createObjectURL(f));
+      setFile(shrunk);
+      setPreview(URL.createObjectURL(shrunk));
     };
   }
 
