@@ -18,6 +18,37 @@ function key(v) {
   return norm(v).replace(/\s/g, "");
 }
 
+function editDistance(a, b) {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > 2) return 99;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+// Tamil place names have no single English spelling — the same locality is
+// written Ayapakkam / Ayappakkam / Ayyapakkam, Tiruvallur / Thiruvallur,
+// Velachery / Velacheri. Requiring an exact match splits one neighbourhood
+// into "inside" and "outside" over a doubled letter, so near-identical names
+// count as the same place. Short names stay strict to avoid collapsing
+// genuinely different ones.
+function samePlace(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length < 6 || b.length < 6) return false;
+  return editDistance(a, b) <= (Math.max(a.length, b.length) >= 9 ? 2 : 1);
+}
+
 // Nominatim returns a big `address` object whose keys vary by place. Pick the
 // most specific sensible value for each level.
 export function parseNominatim(data) {
@@ -88,7 +119,7 @@ export function isInsideArea(standLoc, personLoc) {
   const pState = key(personLoc.state);
 
   // Different states are always different places.
-  if (sState && pState && sState !== pState) return false;
+  if (sState && pState && !samePlace(sState, pState)) return false;
 
   // Real addresses disagree about which level a place name belongs to:
   // "Ambattur" is a neighbourhood to one source and a city/zone to another.
@@ -100,11 +131,14 @@ export function isInsideArea(standLoc, personLoc) {
   // When both sides name an area, that area must be what matches — otherwise
   // two different neighbourhoods of one big city would count as the same place.
   if (sArea && pArea) {
-    return standPlaces.includes(pArea) || personPlaces.includes(sArea);
+    return (
+      standPlaces.some((x) => samePlace(x, pArea)) ||
+      personPlaces.some((x) => samePlace(x, sArea))
+    );
   }
 
   // Otherwise the city is the most specific boundary either side gave us.
-  return standPlaces.some((x) => personPlaces.includes(x));
+  return standPlaces.some((x) => personPlaces.some((y) => samePlace(x, y)));
 }
 
 // Pull the location fields off a row that stores them inline.
